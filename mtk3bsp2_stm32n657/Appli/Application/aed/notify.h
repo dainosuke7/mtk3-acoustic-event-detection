@@ -34,12 +34,15 @@
  * 通知するクラス番号 (モデルの出力順)。屋内で知らせたい音に絞る。
  * ここに無いクラスが1位になったときは LED も JSON も出さない。推論は毎窓続けるので、
  * 落とした数は notify_stats() の offlist に出る (誤報の内訳はこの数で見る)。
+ * crackling_fire (2) は 1-Ex の対照試験 (1-Ex_対照試験結果.docx 4.2) で外した (2026-09-27):
+ * 紙を丸める・手拍子・マグを置く生活音を crackling_fire と通知し (誤報 7 件中 6 件)、
+ * 火の音のクリップは 2 本中 1 本しか拾えなかった (p=0.55)。dog 4 / crying_baby 3 / sneezing 9 の 3 クラス
  *
  * NOTIFY_CLASS_NAMES は上の番号が指すべきクラス名 (同じ順)。モデルを差し替えて出力順が
  * 変わると番号がずれるので、notify_init() がクラス名と照合して食い違いを報告する
  */
-#define NOTIFY_CLASSES		{ 4, 3, 9, 2 }
-#define NOTIFY_CLASS_NAMES	{ "dog", "crying_baby", "sneezing", "crackling_fire" }
+#define NOTIFY_CLASSES		{ 4, 3, 9 }
+#define NOTIFY_CLASS_NAMES	{ "dog", "crying_baby", "sneezing" }
 
 /*
  * 音量の門。窓のピーク (int16 の絶対値の最大) がこの dBFS 未満なら通知しない

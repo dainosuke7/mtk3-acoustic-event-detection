@@ -130,7 +130,7 @@ epoch フック（npu_rt_set_epoch_hook）は今は呼ばれない。stai_networ
   tap_ring_get_window → preproc_run（log-mel）→ npu_rt_infer → notify_decide → notify_window（JSON と LED）。推論の入力は静的な in_tensor（6144B）で、前処理セルフテストと共用する
   判定は ST と同じ（audio_bm.c:488）: 最大確率 > 0.5（CTRL_X_CUBE_AI_OOD_THR）なら そのクラス、そうでなければ unknown
   通知は1行の JSON: {"win":123,"cls":"dog","p":0.87,"lat_ms":53,"under":0,"over":0,"late":0}。検出は毎窓出し、unknown は状態が変わったときだけ出す（連続する unknown は数えるだけ。notify_stats の held）
-  通知するクラスは notify.h の NOTIFY_CLASSES で絞る（既定 dog 4・crying_baby 3・sneezing 9・crackling_fire 2）。対象外のクラスが1位のときは LED も JSON も出さず、数だけ集計行の offlist に出す。番号が出力順とずれていないかは NOTIFY_CLASS_NAMES との照合で notify_init が確かめる
+  通知するクラスは notify.h の NOTIFY_CLASSES で絞る（既定 dog 4・crying_baby 3・sneezing 9 の 3 クラス。crackling_fire 2 は 1-Ex の対照試験の結果で 2026-09-27 に外した。起動ログは notify: 3 target classes）。対象外のクラスが1位のときは LED も JSON も出さず、数だけ集計行の offlist に出す。番号が出力順とずれていないかは NOTIFY_CLASS_NAMES との照合で notify_init が確かめる
   音量の門は NOTIFY_GATE_PEAK_DBFS（既定 -99 ＝ 切）。窓のピーク（win 行の peak と同じ値。RMS ではなくピークなのは犬の1声やくしゃみのような短く鋭い音を落とさないため）がこの dBFS 未満なら unknown 扱いにする。しきい値は notify_init が dBFS から int16 の振幅に直して持つ（毎窓 log を取らない）。止めた数は集計行の gated
   「通知しない状態」（unknown・対象外・門で止めた）が続くあいだ JSON は出ない。状態が変わって unknown になったときだけ1行出る
   確率のしきい値を 0.5 より上げる・同じクラスの連続を条件にする、はまだ入れていない（対照試験の結果を見てから）
