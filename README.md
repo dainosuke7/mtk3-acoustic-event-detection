@@ -61,6 +61,8 @@ FSBL と Appli の両方をビルドします。CubeIDE の GUI からビルド�
    powershell scripts/log.ps1 -Timestamp   # 各行の先頭に PC の時計 (HH:mm:ss.fff) を付ける
    ```
 
+4. 対照実験（3-1）のログ集計: `uv run scripts/analyze_31.py` → `docs/3-1_results.md`（`logs/` の UART ログを先頭の `CONFIG:` 行で A/B/D に振り分け、FINAL・毎秒の in=Hz 行・JSON の lat_ms を表にする）
+
 ### モデル重みの書き込み（Phase 2 以降）
 
 モデルの重みファイルはリポジトリに含めていません（ST のライセンス下の
