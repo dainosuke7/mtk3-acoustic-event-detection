@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    network.h
   * @author  STEdgeAI
-  * @date    2026-09-27 23:34:57
+  * @date    2026-09-27 23:29:11
   * @brief   Minimal description of the generated c-implemention of the network
   ******************************************************************************
   * @attention
@@ -20,7 +20,7 @@
 
 /******************************************************************************/
 #define LL_ATON_NETWORK_C_MODEL_NAME        "network"
-#define LL_ATON_NETWORK_ORIGIN_MODEL_NAME   "yamnet_1024_64x96_tl_qdq_int8"
+#define LL_ATON_NETWORK_ORIGIN_MODEL_NAME   "yamnet_e256_64x96_tl_int8"
 
 /************************** USER ALLOCATED IOs ********************************/
 // No user allocated inputs
@@ -34,8 +34,8 @@
 
 /************************** OUTPUTS *******************************************/
 #define LL_ATON_NETWORK_OUT_NUM        (1)    // Total number of output buffers
-// Output buffer 1 -- Softmax_102_out_0
+// Output buffer 1 -- Dequantize_60_out_0
 #define LL_ATON_NETWORK_OUT_1_ALIGNMENT   (32)
-#define LL_ATON_NETWORK_OUT_1_SIZE_BYTES  (40)
+#define LL_ATON_NETWORK_OUT_1_SIZE_BYTES  (20)
 
 #endif /* LL_ATON_NETWORK_H */

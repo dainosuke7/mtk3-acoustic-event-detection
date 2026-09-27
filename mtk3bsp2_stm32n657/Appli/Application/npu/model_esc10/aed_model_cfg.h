@@ -5,9 +5,12 @@
  * ESC10 版 (Phase 1〜3 で使ってきたモデル。aed_model.h から include される)
  *
  * yamnet_1024_64x96_tl_qdq_int8.onnx (ST の STM32N6-GettingStarted-Audio v2.3.0。ST model zoo の
- * Yamnet 1024 を ESC-10 で転移学習し ONNX で int8 量子化したもの) を STEdgeAI 4.0 (STAI-3.0.0-254-g7cc654104)
- * で NPU 向けに生成した network.c / stai_network.c。重みは外部フラッシュ 0x70180000 (aed_weights.hex、
- * 3,282,785 B。README の書き込み手順)、作業領域は AXISRAM6 0x34350000 (144KB)。
+ * Yamnet 1024 を ESC-10 で転移学習し ONNX で int8 量子化したもの) を ST Edge AI Core 4.0.1
+ * (scripts/stedgeai/generate_esc10.sh。GettingStarted の user_neural_art.json / stm32n6.mpool と同じ設定) で
+ * NPU 向けに生成した network.c / stai_network.c。2026-09-27 に 4.0.0 (STAI-3.0.0-254-g7cc654104) の生成物から
+ * 生成し直した (ランタイム ll_aton 1.1.3-275 に合わせるため)。差はヘッダの記述と版の行だけで、epoch の構成・番地・
+ * 重みは 4.0.0 と同一。重みは外部フラッシュ 0x70180000 (aed_weights.hex、3,282,785 B。README の書き込み手順。
+ * 4.0.0 で書いたものがそのまま使える)、作業領域は AXISRAM6 0x34350000 (144KB)。
  * 出力は softmax 後の float32 x10。並びはモデルの config の class_names を昇順に並べたもの
  * (ST の ai_model_config.h.aed の CTRL_X_CUBE_AI_MODEL_CLASS_LIST と同じ)
  */

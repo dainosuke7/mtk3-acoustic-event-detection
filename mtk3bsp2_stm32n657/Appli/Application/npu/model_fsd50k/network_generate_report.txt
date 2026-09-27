@@ -1,0 +1,111 @@
+ST Edge AI Core v4.0.1-20581 7ed50de05
+Created date          : 2026-09-27 23:29:12
+Parameters            : generate -m C:/Users/daich/work/tron/mtk3bsp2_stm32n657/Appli/Application/npu/model_fsd50k/yamnet_e256_64x96_tl_int8.tflite --target stm32n6 --st-neural-art axisram@user_neural_art_axisram.json --input-data-type int8 --output-data-type float32 --name network
+
+Model name - yamnet_e256_64x96_tl_int8
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+m_id   layer (original)                  oshape                  param/size             macc                   connected to 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+0      serving_default_input_layer0 ()   [b:1,h:64,w:96,c:1]                                                                
+       transpose_0 (TRANSPOSE)           [b:1,h:96,w:64,c:1]                           3,072   serving_default_input_layer0 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+1      conv2d_1 (CONV_2D)                [b:1,h:48,w:32,c:32]    320/416             442,400                    transpose_0 
+       nl_1_nl (CONV_2D)                 [b:1,h:48,w:32,c:32]                         49,152                       conv2d_1 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+2      conv2d_2 (DEPTHWISE_CONV_2D)      [b:1,h:48,w:32,c:32]    320/416             442,400                        nl_1_nl 
+       nl_2_nl (DEPTHWISE_CONV_2D)       [b:1,h:48,w:32,c:32]                         49,152                       conv2d_2 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+3      conv2d_3 (CONV_2D)                [b:1,h:48,w:32,c:64]    2,112/2,304       3,145,792                        nl_2_nl 
+       nl_3_nl (CONV_2D)                 [b:1,h:48,w:32,c:64]                         98,304                       conv2d_3 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+4      conv2d_4 (DEPTHWISE_CONV_2D)      [b:1,h:24,w:16,c:64]    640/832             221,248                        nl_3_nl 
+       nl_4_nl (DEPTHWISE_CONV_2D)       [b:1,h:24,w:16,c:64]                         24,576                       conv2d_4 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+5      conv2d_5 (CONV_2D)                [b:1,h:24,w:16,c:128]   8,320/8,704       3,145,856                        nl_4_nl 
+       nl_5_nl (CONV_2D)                 [b:1,h:24,w:16,c:128]                        49,152                       conv2d_5 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+6      conv2d_6 (DEPTHWISE_CONV_2D)      [b:1,h:24,w:16,c:128]   1,280/1,664         442,496                        nl_5_nl 
+       nl_6_nl (DEPTHWISE_CONV_2D)       [b:1,h:24,w:16,c:128]                        49,152                       conv2d_6 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+7      conv2d_7 (CONV_2D)                [b:1,h:24,w:16,c:128]   16,512/16,896     6,291,584                        nl_6_nl 
+       nl_7_nl (CONV_2D)                 [b:1,h:24,w:16,c:128]                        49,152                       conv2d_7 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+8      conv2d_8 (DEPTHWISE_CONV_2D)      [b:1,h:12,w:8,c:128]    1,280/1,664         110,720                        nl_7_nl 
+       nl_8_nl (DEPTHWISE_CONV_2D)       [b:1,h:12,w:8,c:128]                         12,288                       conv2d_8 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+9      conv2d_9 (CONV_2D)                [b:1,h:12,w:8,c:256]    33,024/33,792     3,145,984                        nl_8_nl 
+       nl_9_nl (CONV_2D)                 [b:1,h:12,w:8,c:256]                         24,576                       conv2d_9 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+10     conv2d_10 (DEPTHWISE_CONV_2D)     [b:1,h:12,w:8,c:256]    2,560/3,328         221,440                        nl_9_nl 
+       nl_10_nl (DEPTHWISE_CONV_2D)      [b:1,h:12,w:8,c:256]                         24,576                      conv2d_10 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+11     conv2d_11 (CONV_2D)               [b:1,h:12,w:8,c:256]    65,792/66,560     6,291,712                       nl_10_nl 
+       nl_11_nl (CONV_2D)                [b:1,h:12,w:8,c:256]                         24,576                      conv2d_11 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+12     pool_12 (MEAN)                    [b:1,h:1,w:1,c:256]                          24,576                       nl_11_nl 
+       reshape_12_reshape (MEAN)         [b:1,c:256]                                                                pool_12 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+13     tfl_pseudo_qconst1 ()             [b:5,c:256]             1,280/1,280                                                
+       tfl_pseudo_qconst ()              [b:5]                   5/20                                                       
+       gemm_13 (FULLY_CONNECTED)         [b:1,c:5]                                     1,285             reshape_12_reshape 
+                                                                                                         tfl_pseudo_qconst1 
+                                                                                                          tfl_pseudo_qconst 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+14     nl_14 (SOFTMAX)                   [b:1,c:5]                                        75                        gemm_13 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+15     conversion_15 (DEQUANTIZE)        [b:1,c:5]                                        10                          nl_14 
+------ --------------------------------- ----------------------- --------------- ----------- ------------------------------ 
+model: macc=24,385,306 weights=137,876 activations=-- io=--
+
+
+
+
+
+Compilation details
+------------------------------------------------------------------------------------
+Compiler version: 1.1.3-275
+Compiler arguments:  -i C:\Users\daich\work\tron\scripts\stedgeai\st_ai_output\yamnet_e256_64x96_tl_int8_OE_3_3_1.onnx --json-quant-file C:\Users\daich\work\tron\scripts\stedgeai\st_ai_output\yamnet_e256_64x96_tl_int8_OE_3_3_1_Q.json -g network.c --load-mdesc C:\ST\STEdgeAI\4.0\Utilities\configs\stm32n6.mdesc --load-mpool C:\Users\daich\work\tron\scripts\stedgeai\stm32n6_axisram.mpool --load-cdesc C:\ST\STEdgeAI\4.0\Utilities\configs\cortex-m55.cdesc --save-mpool-file C:\Users\daich\work\tron\scripts\stedgeai\st_ai_ws\neural_art__network\stm32n6_axisram.mpool --out-dir-prefix C:\Users\daich\work\tron\scripts\stedgeai\st_ai_ws\neural_art__network/ --network-name network --Ocache-opt -O3 --Os --native-float --Omax-ca-pipe 4 --cache-maintenance --csv-file network --all-buffers-info --output-info-file c_info.json --generate-stai
+====================================================================================
+
+Memory usage information  (input/output buffers are included in activations)
+------------------------------------------------------------------------------------
+	npuRAM4    [0x34270000 - 0x342E0000]:    144.938 kB /    448.000 kB  ( 32.35 % used) -- weights:    144.938 kB ( 32.35 % used)  activations:          0  B (  0.00 % used)
+	npuRAM6    [0x34350000 - 0x343C0000]:    144.000 kB /    448.000 kB  ( 32.14 % used) -- weights:          0  B (  0.00 % used)  activations:    144.000 kB ( 32.14 % used)
+---
+Total:                                           288.938 kB                                  -- weights:    144.938 kB                  activations:    144.000 kB                   
+====================================================================================
+
+
+Used memory ranges
+------------------------------------------------------------------------------------
+	npuRAM4    [0x34270000 - 0x342E0000]: 0x34270000-0x342943D0
+	npuRAM6    [0x34350000 - 0x343C0000]: 0x34350000-0x34374000
+====================================================================================
+
+Epochs details
+------------------------------------------------------------------------------------
+Total number of epochs                               15
+>> pure software (SW) epochs                          2
+>> hybrid epochs (using both software and hardware)   1
+>> pure hardware (HW or EC) epochs                   12  (implemented in 0 epoch controller blobs/meta epochs)
+---
++----------+--------+------------------+
+| epoch ID |  Type  |     Details      |
++----------+--------+------------------+
+| epoch_2  | Hybrid |    Transpose     |
+| epoch_3  |   HW   |                  |
+| epoch_4  |   HW   |                  |
+| epoch_5  |   HW   |                  |
+| epoch_6  |   HW   |                  |
+| epoch_7  |   HW   |                  |
+| epoch_8  |   HW   |                  |
+| epoch_9  |   HW   |                  |
+| epoch_10 |   HW   |                  |
+| epoch_11 |   HW   |                  |
+| epoch_12 |   HW   |                  |
+| epoch_13 |   HW   |                  |
+| epoch_14 |   HW   |                  |
+| epoch_15 |   SW   |     Softmax      |
+| epoch_16 |   SW   | DequantizeLinear |
++----------+--------+------------------+
+====================================================================================

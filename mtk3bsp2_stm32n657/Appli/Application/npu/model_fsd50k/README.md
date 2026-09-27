@@ -52,7 +52,7 @@ uv run --with tensorflow scripts/aed_clips.py --model fsd50k <ESC-50>
 - ESC-50 の fold 5 の 4 本（5-218980-A-30 / 5-235644-A-30 / 5-221528-A-39 / 5-233605-A-39）は ESC-10 の外なので、
   `audio/` に無ければ `https://github.com/karolpiczak/ESC-50/raw/master/audio/<file>` から取る
 
-## network.c の生成（STEdgeAI Core 4.0 の stedgeai が要る。2026-09-27 時点で未実施）
+## network.c の生成（ST Edge AI Core 4.0.1 の stedgeai。2026-09-27 に生成済み）
 
 ```bash
 bash scripts/stedgeai/generate_fsd50k.sh [C:/ST/STEdgeAI/4.0/Utilities/windows/stedgeai.exe]
@@ -68,15 +68,31 @@ bash scripts/stedgeai/generate_fsd50k.sh [C:/ST/STEdgeAI/4.0/Utilities/windows/s
 2. 生成物 `network.c / network.h / stai_network.c / stai_network.h` をこのディレクトリに写す（無改変）
 3. 重み `network_atonbuf.AXISRAM4.raw` を `raw2c.py` で `network_weights.c`（`.npu_weights` セクションの const 配列）にする。
    `Appli/STM32N657X0HXQ_LRUN.ld` の AXISRAM4 領域（0x34270000）に置かれ、Debug 起動でデバッガが elf と一緒に載せる
-4. `network.c` 冒頭の `#if LL_ATON_VERSION_MAJOR != 1 || ...` が repo の `npu/st/ll_aton/ll_aton_version.h`
-   （atonn-v1.1.3-262-g7cc65410）と食い違えば、ツール同梱の ll_aton と NetworkRuntime ライブラリを両方まとめて入れ替える
-   （片方だけ変えない。README の一覧の版も更新）。ESC10 版も同じランタイムでビルドが通ることを確かめる
-5. `aed_model_cfg.h` の `AED_LOGIT_*` を生成した network.c から読んで入れる（どの epoch が SW の DequantizeLinear か、
-   scale / zero_point の番地。`AED_LOGIT_HOOK` を 1 に）。入れるまでは logits_check を飛ばす
-6. `bash scripts/build.sh`（network.c があれば `aed_model.h` が自動で FSD50K を選ぶ）
+4. `network.c` 冒頭の `#if LL_ATON_VERSION_MAJOR != 1 || ...` が repo の `npu/st/ll_aton/ll_aton_version.h` と
+   食い違えば、ツール同梱の ll_aton と NetworkRuntime ライブラリを両方まとめて入れ替える（片方だけ変えない。README の
+   一覧の版も更新）。ESC10 版も同じランタイムで生成し直す（`generate_esc10.sh`）。
+   2026-09-27: 4.0.1 の生成物は atonn-v1.1.3-275 を要求し、repo は 262（4.0.0）だったので、`npu/st/` の ll_aton・
+   device・Inc・`NetworkRuntime1201_CM55_GCC.a`・LICENSE（SLA0104）を 4.0.1 の `Middlewares/ST/AI` に入れ替えた。
+   ESC10 版も 4.0.1 で生成し直したが、差はヘッダの記述と版の行だけで epoch・番地・重みは同一（外部フラッシュの重みは書き直し不要）
+5. `aed_model_cfg.h` の `AED_LOGIT_*`（入れ済み。下の「生成物の構成」）
+6. `bash scripts/build.sh`（network.c があるので `aed_model.h` が FSD50K を選ぶ。ESC10 で試すときは `-DAED_MODEL=AED_MODEL_ESC10`）
 
-重みの置き場の根拠: model zoo の表で Yamnet 256 の重みは約 137 KiB、作業域 144 KiB。Appli の ROM 領域（511 KB）は
-ESC10 版で 369 KB 使っていて残り 142 KB では重みを載せられない。AXISRAM4 は未使用の 448 KB で、NPU からは AXISRAM6 と
+### 生成物の構成（4.0.1、`network_generate_report.txt`）
+
+| 項目 | 値 |
+|---|---|
+| epoch | 15（HW 12、hybrid 1 = Transpose、SW 2 = epoch 15 整数 Softmax、epoch 16 DequantizeLinear） |
+| 重み | 148,417 B → AXISRAM4 0x34270000〜0x342943D0（`network_weights.c`、`.npu_weights`） |
+| 作業域 | 144 KB → AXISRAM6 0x34350000〜0x34374000（入力 0x34350000 の 6144 B、出力 float x5 は 0x34350200） |
+| int8 ロジット | epoch 14（NPU、Gemm_55）が 0x34350200 に書く。scale 0.137729645 / zero_point 74（softmax の入力。AXISRAM4 の 0x342942c0 / 0x342943b0） |
+| softmax | epoch 15 が整数で計算し int8 を 0x34350220 に書く（scale 1/256、zp -128）。epoch 16 が float にして 0x34350200 に書く（＝出力。int8 ロジットは残らない） |
+| macc | 24,385,306（ESC10 版は 72,777,221） |
+
+ESC10 版と違い softmax が整数なので、セルフテストの「float の softmax 入力を int8 に逆算して一致」の確認は無い
+（`AED_LOGIT_F_ADDR` 0）。int8 ロジットと scale / zp を PC（`aed_test_input.h`）と比べるところは同じ。
+
+重みの置き場の根拠: 生成物の重みは 148,417 B（model zoo の表の約 137 KiB より少し大きい）、作業域 144 KiB。Appli の
+ROM 領域（511 KB）は ESC10 版で 371 KB 使っていて残り 140 KB では重みを載せられない。AXISRAM4 は未使用の 448 KB で、NPU からは AXISRAM6 と
 同じバス・同じ RISAF の扱い。FSBL からの起動（外部フラッシュのアプリ像を `BOOT_Application` が複写）では連続した 1 つの像しか
 載らないので、この置き方は Debug 起動専用（本機の運用は Debug 起動）。
 

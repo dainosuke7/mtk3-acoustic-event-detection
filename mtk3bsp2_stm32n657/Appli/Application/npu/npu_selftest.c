@@ -257,7 +257,10 @@ LOCAL BOOL logits_check(void)
 				logit_flags);
 	}
 
-	/* ボードの scale / zero_point: DequantizeLinear が外部フラッシュ (重み) から読む値 */
+	/*
+	 * ボードの scale / zero_point: softmax 直前の int8 の量子化。SW epoch が重みの領域から読む値
+	 * (ESC10: DequantizeLinear が外部フラッシュから。FSD50K: 整数 softmax が AXISRAM4 から)
+	 */
 	b_scale  = *(const volatile float *)LOGIT_SCALE_ADDR;
 	b_zp     = *(const volatile B *)LOGIT_ZP_ADDR;
 	scale_ok = (memcmp(&b_scale, &pc_scale, sizeof(float)) == 0);
@@ -273,8 +276,16 @@ LOCAL BOOL logits_check(void)
 	 * CPU (epoch 30) が書いて network.c が clean 済みのラインなので、invalidate しても
 	 * 失うものは無い (0x34350440〜0x3435047F。epoch 31 はここに書かない)
 	 */
+#if AED_LOGIT_F_ADDR != 0
 	SCB_InvalidateDCache_by_Addr((volatile void *)LOGIT_F_ADDR, 2 * LINE_BYTES);
 	memcpy(lf, (const void *)LOGIT_F_ADDR, sizeof(lf));
+#else
+	/*
+	 * 整数 softmax のモデル (FSD50K): float の softmax 入力は無いので、取った int8 を scale / zp で
+	 * float に直した値を表示だけする (逆算の確認は自明に一致)
+	 */
+	for(i = 0; i < NPU_RT_OUT_CLASSES; i++) lf[i] = ((float)logit_q[i] - (float)b_zp) * b_scale;
+#endif
 
 	tm_printf((UB*)"   # class            npu  ort noopt  d_ort d_noopt  logit(x1e-4) back\n");
 	for(i = 0; i < NPU_RT_OUT_CLASSES; i++) {
@@ -300,7 +311,11 @@ LOCAL BOOL logits_check(void)
 	}
 	tm_printf((UB*)"  max |npu - ort| = %d LSB, max |npu - ort_noopt| = %d LSB"
 			" (the two PC references differ by up to %d LSB)\n", max_opt, max_flt, max_pc);
+#if AED_LOGIT_F_ADDR != 0
 	tm_printf((UB*)"  softmax input float -> int8 matches captured int8: %s\n", back_ok ? "yes" : "NO");
+#else
+	tm_printf((UB*)"  softmax input float -> int8 check: skipped (integer softmax, no float softmax input in this model)\n");
+#endif
 
 	pass_opt = (max_opt <= LOGIT_TOL_LSB);
 	pass_flt = (max_flt <= LOGIT_TOL_LSB);
