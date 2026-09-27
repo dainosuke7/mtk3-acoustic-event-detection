@@ -31,7 +31,8 @@ lat_ms、READY 以降の lcd 行 (描画までの時間) を集計し、docs/3-1
 1 つのファイルにボードの再起動が 2 回以上入っていれば (CONFIG: 行が複数)、起動ごとに別の走行として扱う。
 
 走行集計 (3.5 誤報対策の前後比較): 読んだ走行ごとに、通知の行数 (FINAL の notify out) とクラス別の JSON 行数、
-gated / held / offlist、READY〜FINAL の時間と 1 時間あたりの件数を標準出力に出す (表の後。docs にも同じものを書く。
+gated (3.5-2 からは gated_abs / gated_rel) / held / offlist、READY〜FINAL の時間と 1 時間あたりの件数を標準出力に出す
+(表の後。docs にも同じものを書く。
 引数でログを渡したときはその全部、PINNED / --scan のときは表に使った走行だけ)。
 10 分のログでも 1 時間のログでも同じ形式。CONFIG: 行の無いログ (起動後に記録を始めたもの) も、
 READY と FINAL があれば集計する (3-1 の表には使わない)。
@@ -105,8 +106,12 @@ FINAL_LINES = {
         ("x", "win_max", "win_avg", "spin_n", "spin_max", "spin_avg", "spin_skipped"),
     ),
     "notify": (
-        re.compile(r"notify out=(\d+) held=(\d+) offlist=(\d+) gated=(\d+) lat max=(\d+)us \((\d+) lower bounds\)"),
-        ("out", "held", "offlist", "gated", "lat_max_us", "lat_loose"),
+        # 3.5 までは gated=、3.5-2 からは gated_abs= gated_rel= (無い方は None。gated は後で abs+rel にする)
+        re.compile(
+            r"notify out=(\d+) held=(\d+) offlist=(\d+) (?:gated=(\d+)|gated_abs=(\d+) gated_rel=(\d+)) "
+            r"lat max=(\d+)us \((\d+) lower bounds\)"
+        ),
+        ("out", "held", "offlist", "gated", "gated_abs", "gated_rel", "lat_max_us", "lat_loose"),
     ),
     "log": (
         re.compile(r"log sent=(\d+) dropped=(\d+) lag max=(\d+)us"),
@@ -234,7 +239,10 @@ def parse_log(path: Path) -> list[Run]:
                 for key, (rx, names) in FINAL_LINES.items():
                     m = rx.search(text)
                     if m:
-                        run.final[key] = dict(zip(names, (int(v) for v in m.groups())))
+                        d = dict(zip(names, (int(v) if v is not None else None for v in m.groups())))
+                        if key == "notify" and d["gated"] is None:
+                            d["gated"] = d["gated_abs"] + d["gated_rel"]
+                        run.final[key] = d
                         break
                 continue
 
@@ -374,7 +382,13 @@ def run_summary(run: Run) -> list[str]:
     out.append(f"    クラス別: {by_cls or '-'}{note}")
     out.append(f"    検出 (unknown を除く): {n_detect} 件 = {per_hour(n_detect, secs)} / unknown: {n_unknown} 件")
     if nt:
-        out.append(f"  gated {nt['gated']} / held {nt['held']} / offlist {nt['offlist']}  (FINAL。gated=音量の門で止めた窓、"
+        if nt.get("gated_abs") is None:
+            gated = f"gated {nt['gated']}"
+            what = "gated=音量の門で止めた窓"
+        else:
+            gated = f"gated_abs {nt['gated_abs']} / gated_rel {nt['gated_rel']}"
+            what = "gated_abs=ピークの門で止めた窓、gated_rel=暗騒音からの差の門で止めた窓"
+        out.append(f"  {gated} / held {nt['held']} / offlist {nt['offlist']}  (FINAL。{what}、"
                    f"held=unknown が続いて出さなかった窓、offlist=通知対象外のクラスの窓)")
     return out
 
@@ -388,7 +402,17 @@ def med(xs: list[int]) -> str:
 
 def g(f: dict[str, dict[str, int]], key: str, name: str) -> str:
     d = f.get(key)
-    return str(d[name]) if d and name in d else "-"
+    return str(d[name]) if d and d.get(name) is not None else "-"
+
+
+def gated_text(f: dict[str, dict[str, int]]) -> str:
+    """gated の数。3.5-2 以降のログは abs / rel の内訳付き"""
+    d = f.get("notify")
+    if not d:
+        return "-"
+    if d.get("gated_abs") is None:
+        return str(d["gated"])
+    return f"{d['gated']} (abs {d['gated_abs']}, rel {d['gated_rel']})"
 
 
 def rows_for(run: Run) -> dict[str, str]:
@@ -411,7 +435,7 @@ def rows_for(run: Run) -> dict[str, str]:
         "infer max / avg": f"{g(f,'time','inf_max')}us / {g(f,'time','inf_avg')}us",
         "窓 1 つの実測 max / avg (前処理+推論+空回し)": f"{sl['win_max']}us / {sl['win_avg']}us" if sl else "-",
         "空回し n / max / avg / skipped": f"{sl['spin_n']} / {sl['spin_max']}us / {sl['spin_avg']}us / {sl['spin_skipped']}" if sl else "-",
-        "notify out / held / offlist / gated": f"{g(f,'notify','out')} / {g(f,'notify','held')} / {g(f,'notify','offlist')} / {g(f,'notify','gated')}",
+        "notify out / held / offlist / gated": f"{g(f,'notify','out')} / {g(f,'notify','held')} / {g(f,'notify','offlist')} / {gated_text(f)}",
         "notify lat max (下限値の数)": f"{g(f,'notify','lat_max_us')}us ({g(f,'notify','lat_loose')})",
         "log sent / dropped": f"{g(f,'log','sent')} / {g(f,'log','dropped')}",
         "log lag max": f"{g(f,'log','lag_max_us')}us",

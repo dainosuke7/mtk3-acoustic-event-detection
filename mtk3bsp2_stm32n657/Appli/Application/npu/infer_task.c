@@ -125,7 +125,6 @@ LOCAL ER	run_last_er;
 LOCAL UW	pp_us_max, pp_us_sum, inf_us_max, inf_us_sum;
 LOCAL INT	last_cls = AED_CLS_UNKNOWN;	/* 窓の1行に出すための、直前の判定 */
 LOCAL INT	last_p100;
-LOCAL BOOL	last_gated;			/* 直前の窓を音量の門で止めたか (窓の1行に印を付ける) */
 
 #if INFER_SLOW_X > 1
 /*
@@ -140,9 +139,9 @@ LOCAL UW	slow_spin(UW base_us);			/* 戻り値: 実際に回した時間 (us)。
 
 /*
  * 窓1つを処理する。preproc_run → npu_rt_infer → notify_decide → notify_window。
- * 通知 (JSON と LED) は notify_window が行う
+ * 通知 (JSON と LED) は notify_window が行う。rms・peak は window_level の値 (win 行と同じ)
  */
-LOCAL BOOL process_window(const TAP_WIN_INFO *info, UW peak, UW *pp_us, UW *inf_us)
+LOCAL BOOL process_window(const TAP_WIN_INFO *info, UW rms, UW peak, UW *pp_us, UW *inf_us)
 {
 	float	out[NPU_RT_OUT_CLASSES], p;
 	INT	cls;
@@ -179,12 +178,13 @@ LOCAL BOOL process_window(const TAP_WIN_INFO *info, UW peak, UW *pp_us, UW *inf_
 
 	/*
 	 * 診断の1行にはゲートより前の判定を出す (窓の 1位が何だったかは残したい)。
-	 * 通知するかどうか (対象クラスか、ピークが足りるか) は notify_window が決める
+	 * 通知するかどうか (対象クラスか、ピークと暗騒音からの差が足りるか) は notify_window
+	 * (の中の notify_gate) が決める。門で止めた・通した理由は notify_last_note() で窓行に付ける
 	 */
-	cls        = notify_decide(out, &p);
-	last_cls   = cls;
-	last_p100  = (INT)(p * 100.0f + 0.5f);
-	last_gated = notify_window(info->seq, cls, p, peak, info->t_ready, info->lag_exact);
+	cls       = notify_decide(out, &p);
+	last_cls  = cls;
+	last_p100 = (INT)(p * 100.0f + 0.5f);
+	(void)notify_window(info->seq, cls, p, rms, peak, info->t_ready, info->lag_exact);
 	return TRUE;
 }
 
@@ -255,12 +255,12 @@ LOCAL void show_summary(const char *why)
 {
 	TAP_STATS	st;
 	UW		under, over, late;
-	UW		n_out, n_held, n_offlist, n_gated, lat_max, lat_loose;
+	UW		n_out, n_held, n_offlist, n_gated_abs, n_gated_rel, lat_max, lat_loose;
 	UW		d_sent, d_drop, d_max, d_avg;
 
 	tap_ring_stats(&st);
 	audio_pt_counts(&under, &over, &late);
-	notify_stats(&n_out, &n_held, &n_offlist, &n_gated, &lat_max, &lat_loose);
+	notify_stats(&n_out, &n_held, &n_offlist, &n_gated_abs, &n_gated_rel, &lat_max, &lat_loose);
 
 	log_printf("tap %s: windows=%u (expected %u from %u samples) overrun=%u torn=%u skipped=%u"
 			" seam ok=%u NG=%u\n",
@@ -282,10 +282,11 @@ LOCAL void show_summary(const char *why)
 #endif
 	/*
 	 * 判定の内訳: out=出した行 / held=続いた unknown で出さなかった窓 /
-	 * offlist=通知対象外のクラスだった窓 / gated=音量の門で止めた窓
+	 * offlist=通知対象外のクラスだった窓 / gated_abs=ピークの門で止めた窓 /
+	 * gated_rel=暗騒音からの差の門で止めた窓 (notify.h)
 	 */
-	log_printf("  notify out=%u held=%u offlist=%u gated=%u lat max=%uus (%u lower bounds)\n",
-			n_out, n_held, n_offlist, n_gated, lat_max, lat_loose);
+	log_printf("  notify out=%u held=%u offlist=%u gated_abs=%u gated_rel=%u lat max=%uus (%u lower bounds)\n",
+			n_out, n_held, n_offlist, n_gated_abs, n_gated_rel, lat_max, lat_loose);
 	log_printf("  log sent=%u dropped=%u lag max=%uus\n",
 			log_sent(), log_dropped(), log_lag_max_us());
 
@@ -724,7 +725,7 @@ LOCAL void task_infer(INT stacd, void *exinf)
 		 */
 		pp_us  = 0;
 		inf_us = 0;
-		done   = ready ? process_window(&info, peak, &pp_us, &inf_us) : FALSE;
+		done   = ready ? process_window(&info, rms, peak, &pp_us, &inf_us) : FALSE;
 
 #if NPU_PT_TEST
 		pt_step(npu_ok);
@@ -742,10 +743,13 @@ LOCAL void task_infer(INT stacd, void *exinf)
 					info.seq, info.pos, dbfs, bar, rms, peak, seam,
 					info.lag_exact ? "" : ">=", info.lag_us);
 			if(done) {
-				/* 閾値は超えたが音量の門で止めた窓は "(gated)" を付ける (JSON も LED も出ていない) */
+				/*
+				 * 門の結果を付ける (notify.h の notify_last_note): 通した窓は "(floor -42.6 Δ+17.0)"、
+				 * 止めた窓は "(gated abs)" / "(gated rel floor -42.6 Δ+6.2)"。unknown と対象外は無印
+				 */
 				log_printf("  -> %-15s p=%d.%02d%s  preproc=%uus infer=%uus\n",
 						notify_class_name(last_cls), last_p100 / 100,
-						last_p100 % 100, last_gated ? " (gated)" : "",
+						last_p100 % 100, notify_last_note(),
 						pp_us, inf_us);
 			}
 			if(((info.seq + 1U) % SUMMARY_EVERY) == 0) {
