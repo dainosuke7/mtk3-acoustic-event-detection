@@ -51,7 +51,32 @@
 
 - `uart_20260927_020751.log`（CONFIG: D slow-infer）: 表に使うログを固定している（PINNED） ― windows 557/642, overrun 67, audio 0/0/0, log dropped 3846, disp max 7015440us, JSON lat_ms median 1714
 
-CONFIG: 行の無いログ（スイッチを入れる前のもの）10 本は読み飛ばした。
+CONFIG: 行の無いログ（スイッチを入れる前のもの）11 本は読み飛ばした。
+
+## 走行集計（通知の件数と 1 時間あたりの件数）
+
+3.5 の誤報対策の前後を同じ形式で比べるためのもの。通知の総数は FINAL の notify out、クラス別は JSON 行の数。
+
+```
+走行集計: uart_20260927_005956.log  CONFIG: A production (INFER_PRIO_INVERT=0 INFER_SLOW_X=1)
+  走行時間 READY→FINAL: 9:57 (597.9 s)
+  通知 (JSON 行、FINAL の notify out): 199 件 = 1198 件/時
+    クラス別: sneezing 85 / unknown 69 / crackling_fire 37 / dog 4（ログ上の JSON 行は 195。差 4 は reporter が捨てた行 = READY 前のダンプ中、D では満杯のキュー）
+    検出 (unknown を除く): 126 件 = 759 件/時 / unknown: 69 件
+  gated 0 / held 302 / offlist 141  (FINAL。gated=音量の門で止めた窓、held=unknown が続いて出さなかった窓、offlist=通知対象外のクラスの窓)
+走行集計: uart_20260927_011552.log  CONFIG: B prio-invert (INFER_PRIO_INVERT=1 INFER_SLOW_X=1)
+  走行時間 READY→FINAL: 10:05 (605.2 s)
+  通知 (JSON 行、FINAL の notify out): 293 件 = 1743 件/時
+    クラス別: sneezing 127 / unknown 84 / crackling_fire 76 / crying_baby 1（ログ上の JSON 行は 288。差 5 は reporter が捨てた行 = READY 前のダンプ中、D では満杯のキュー）
+    検出 (unknown を除く): 204 件 = 1213 件/時 / unknown: 84 件
+  gated 0 / held 178 / offlist 129  (FINAL。gated=音量の門で止めた窓、held=unknown が続いて出さなかった窓、offlist=通知対象外のクラスの窓)
+走行集計: uart_20260927_013950.log  CONFIG: D slow-infer (INFER_PRIO_INVERT=0 INFER_SLOW_X=10)
+  走行時間 READY→FINAL: 9:59 (599.6 s)
+  通知 (JSON 行、FINAL の notify out): 264 件 = 1585 件/時
+    クラス別: sneezing 10 / unknown 4（ログ上の JSON 行は 14。差 250 は reporter が捨てた行 = READY 前のダンプ中、D では満杯のキュー）
+    検出 (unknown を除く): 10 件 = 60 件/時 / unknown: 4 件
+  gated 0 / held 226 / offlist 68  (FINAL。gated=音量の門で止めた窓、held=unknown が続いて出さなかった窓、offlist=通知対象外のクラスの窓)
+```
 
 ## 付録: FINAL ブロックの本文（ログのまま）
 

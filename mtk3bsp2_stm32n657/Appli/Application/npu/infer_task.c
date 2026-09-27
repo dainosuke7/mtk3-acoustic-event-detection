@@ -125,6 +125,7 @@ LOCAL ER	run_last_er;
 LOCAL UW	pp_us_max, pp_us_sum, inf_us_max, inf_us_sum;
 LOCAL INT	last_cls = AED_CLS_UNKNOWN;	/* 窓の1行に出すための、直前の判定 */
 LOCAL INT	last_p100;
+LOCAL BOOL	last_gated;			/* 直前の窓を音量の門で止めたか (窓の1行に印を付ける) */
 
 #if INFER_SLOW_X > 1
 /*
@@ -180,10 +181,10 @@ LOCAL BOOL process_window(const TAP_WIN_INFO *info, UW peak, UW *pp_us, UW *inf_
 	 * 診断の1行にはゲートより前の判定を出す (窓の 1位が何だったかは残したい)。
 	 * 通知するかどうか (対象クラスか、ピークが足りるか) は notify_window が決める
 	 */
-	cls       = notify_decide(out, &p);
-	last_cls  = cls;
-	last_p100 = (INT)(p * 100.0f + 0.5f);
-	notify_window(info->seq, cls, p, peak, info->t_ready, info->lag_exact);
+	cls        = notify_decide(out, &p);
+	last_cls   = cls;
+	last_p100  = (INT)(p * 100.0f + 0.5f);
+	last_gated = notify_window(info->seq, cls, p, peak, info->t_ready, info->lag_exact);
 	return TRUE;
 }
 
@@ -741,9 +742,11 @@ LOCAL void task_infer(INT stacd, void *exinf)
 					info.seq, info.pos, dbfs, bar, rms, peak, seam,
 					info.lag_exact ? "" : ">=", info.lag_us);
 			if(done) {
-				log_printf("  -> %-15s p=%d.%02d  preproc=%uus infer=%uus\n",
+				/* 閾値は超えたが音量の門で止めた窓は "(gated)" を付ける (JSON も LED も出ていない) */
+				log_printf("  -> %-15s p=%d.%02d%s  preproc=%uus infer=%uus\n",
 						notify_class_name(last_cls), last_p100 / 100,
-						last_p100 % 100, pp_us, inf_us);
+						last_p100 % 100, last_gated ? " (gated)" : "",
+						pp_us, inf_us);
 			}
 			if(((info.seq + 1U) % SUMMARY_EVERY) == 0) {
 				log_block_begin("TAP TOTAL win=%u", info.seq);

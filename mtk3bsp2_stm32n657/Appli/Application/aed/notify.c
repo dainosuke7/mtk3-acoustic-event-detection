@@ -105,21 +105,40 @@ EXPORT ER notify_init(void)
 			bad = TRUE;
 		}
 	}
-	log_printf("notify: %d target classes (%s%s%s%s), OOD threshold p>0.50\n", N_TARGETS,
-			(N_TARGETS > 0) ? target_name[0] : "", (N_TARGETS > 1) ? " " : "",
-			(N_TARGETS > 1) ? target_name[1] : "", (N_TARGETS > 2) ? " ..." : "");
-
 	/*
 	 * 音量の門。毎窓 log を取らずに済むよう、dBFS を int16 の振幅に直して持つ。
 	 * -99dBFS は「切」の意味なので、振幅を 0 にして比較そのものを飛ばす
 	 */
 	gate_amp = (NOTIFY_GATE_PEAK_DBFS <= -99) ? 0U
 			: (UW)(32768.0f * powf(10.0f, (float)NOTIFY_GATE_PEAK_DBFS / 20.0f) + 0.5f);
-	if(gate_amp == 0) {
-		log_printf("notify: peak gate off (NOTIFY_GATE_PEAK_DBFS=%d)\n", NOTIFY_GATE_PEAK_DBFS);
-	} else {
-		log_printf("notify: peak gate %ddBFS (window peak must be >= %u of 32768)\n",
-				NOTIFY_GATE_PEAK_DBFS, gate_amp);
+
+	/*
+	 * 判定の規則を起動ログに 1 行で残す (ログを読むとき、どの値で走ったか分かるように):
+	 *   notify: 3 target classes (dog crying_baby sneezing), threshold p>0.70, peak gate -30 dBFS (peak >= 1036 of 32768)
+	 * クラス名は数が変わっても全部出す (log_printf の書式は可変長にできないので、
+	 * ここで空白区切りの 1 つの文字列にする)
+	 */
+	{
+		char	names[64];
+		INT	n = 0, len;
+		INT	thr100 = (INT)(AED_OOD_THR * 100.0f + 0.5f);
+
+		for(i = 0; i < N_TARGETS; i++) {
+			len = (INT)strlen(target_name[i]);
+			if(n + (n > 0) + len >= (INT)sizeof(names)) break;
+			if(n > 0) names[n++] = ' ';
+			memcpy(&names[n], target_name[i], (size_t)len);
+			n += len;
+		}
+		names[n] = '\0';
+		if(gate_amp == 0) {
+			log_printf("notify: %d target classes (%s), threshold p>%d.%02d, peak gate off\n",
+					N_TARGETS, names, thr100 / 100, thr100 % 100);
+		} else {
+			log_printf("notify: %d target classes (%s), threshold p>%d.%02d, peak gate %d dBFS (peak >= %u of 32768)\n",
+					N_TARGETS, names, thr100 / 100, thr100 % 100,
+					NOTIFY_GATE_PEAK_DBFS, gate_amp);
+		}
 	}
 
 	id = tk_cre_alm(&calm_led);
@@ -148,19 +167,21 @@ EXPORT const char *notify_class_name(INT cls)
 	return class_name[cls];
 }
 
-EXPORT void notify_window(UW win, INT cls, float p, UW peak, UW t_ready, BOOL lat_exact)
+EXPORT BOOL notify_window(UW win, INT cls, float p, UW peak, UW t_ready, BOOL lat_exact)
 {
 	UW	under, over, late, us, lat_ms;
 	INT	p100;
+	BOOL	gated = FALSE;
 
 	/*
 	 * 音量の門: ピークが足りない窓は unknown と同じ扱いにする (門が無効なら何もしない)。
 	 * ここで unknown に落としてから下の状態の判定に入るので、静かな時間に出るのは
-	 * unknown の1行だけになる
+	 * unknown の1行だけになる。止めたことは戻り値で返し、窓の診断行に印が付く
 	 */
 	if(cls != AED_CLS_UNKNOWN && gate_amp > 0 && peak < gate_amp) {
 		n_gated++;
-		cls = AED_CLS_UNKNOWN;
+		gated = TRUE;
+		cls   = AED_CLS_UNKNOWN;
 	}
 
 	/*
@@ -173,13 +194,13 @@ EXPORT void notify_window(UW win, INT cls, float p, UW peak, UW t_ready, BOOL la
 	if(cls != AED_CLS_UNKNOWN && !is_target(cls)) {
 		n_offlist++;
 		prev_cls = AED_CLS_UNKNOWN;
-		return;
+		return gated;
 	}
 	if(cls == AED_CLS_UNKNOWN) {
 		if(!first && prev_cls == AED_CLS_UNKNOWN) {
 			/* 状態が変わっていない。出さない */
 			n_held++;
-			return;
+			return gated;
 		}
 	} else {
 		led_on_for_a_while();
@@ -215,6 +236,7 @@ EXPORT void notify_window(UW win, INT cls, float p, UW peak, UW t_ready, BOOL la
 			win, notify_class_name(cls), p100 / 100, p100 % 100, lat_ms,
 			under, over, late);
 	n_emitted++;
+	return gated;
 }
 
 EXPORT void notify_stats(UW *emitted, UW *held, UW *offlist, UW *gated,

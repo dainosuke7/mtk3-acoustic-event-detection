@@ -29,6 +29,14 @@ lat_ms、READY 以降の lcd 行 (描画までの時間) を集計し、docs/3-1
     lcd: win 19 -> FIRE p=0.93 (542712 us after notify)                             lcd_task.c
     FINAL の本文                                                                    infer_task.c show_summary
 1 つのファイルにボードの再起動が 2 回以上入っていれば (CONFIG: 行が複数)、起動ごとに別の走行として扱う。
+
+走行集計 (3.5 誤報対策の前後比較): 読んだ走行ごとに、通知の行数 (FINAL の notify out) とクラス別の JSON 行数、
+gated / held / offlist、READY〜FINAL の時間と 1 時間あたりの件数を標準出力に出す (表の後。docs にも同じものを書く。
+引数でログを渡したときはその全部、PINNED / --scan のときは表に使った走行だけ)。
+10 分のログでも 1 時間のログでも同じ形式。CONFIG: 行の無いログ (起動後に記録を始めたもの) も、
+READY と FINAL があれば集計する (3-1 の表には使わない)。
+
+    uv run scripts/analyze_31.py logs/uart_20260927_130250.log --out -   # 対策前 (A、静かな部屋 10 分) の走行集計だけ見る
 """
 
 from __future__ import annotations
@@ -38,6 +46,7 @@ import json
 import re
 import statistics
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -125,11 +134,13 @@ class Run:
     t_config: float | None = None   # PC の時計 (秒)。-Timestamp 無しのログでは None
     t_ready: float | None = None
     t_final: float | None = None
+    ready_seen: bool = False
     final_seen: bool = False
     final: dict[str, dict[str, int]] = field(default_factory=dict)
     final_text: list[str] = field(default_factory=list)
     rates: list[tuple[int, int, int, int, int | None]] = field(default_factory=list)  # in, out, under, over, logdrop (READY 以降)
     lat_ms: list[int] = field(default_factory=list)      # READY 以降の JSON の lat_ms
+    cls_lines: Counter = field(default_factory=Counter)  # JSON 行のクラス別の数 (走行全体。FINAL の notify out と同じ範囲)
     lcd_us: list[int] = field(default_factory=list)      # READY 以降の lcd 行の「通知から描画まで」
     n_lost_lines: int = 0       # "tap: window lost" が出力できた回数 (D では大半が捨てられる)
     n_stopped: int = 0          # PASSTHROUGH STOPPED の見出しの数
@@ -152,7 +163,13 @@ class Run:
             return "FINAL が無い（途中で止めたログ）"
         return "FINAL ブロックが不完全（欠けた行: " + ", ".join(self.missing) + "）"
 
+    @property
+    def has_config(self) -> bool:
+        return self.cond != ""
+
     def config_line(self) -> str:
+        if not self.has_config:
+            return "(CONFIG: 行なし)"
         kv = " ".join(f"{k}={v}" for k, v in self.switches.items())
         return f"{self.cond} {self.cond_name} ({kv})"
 
@@ -163,7 +180,8 @@ def ts_seconds(m: re.Match) -> float:
 
 
 def parse_log(path: Path) -> list[Run]:
-    """CONFIG: 行ごとに 1 つの Run。CONFIG: の無いログは空のリスト"""
+    """CONFIG: 行ごとに 1 つの Run。CONFIG: 行より前に本文があれば (記録を途中から始めたログ)、
+    そこも cond="" の Run にする (走行集計にだけ使い、3-1 の表には使わない)"""
     runs: list[Run] = []
     run: Run | None = None
     in_final = False
@@ -182,6 +200,8 @@ def parse_log(path: Path) -> list[Run]:
                 if not m:
                     print(f"[warn] {path.name}: CONFIG: 行の形が違う: {text}", file=sys.stderr)
                     continue
+                if runs and not runs[-1].has_config and not runs[-1].ready_seen and not runs[-1].final_seen:
+                    runs.pop()      # CONFIG: より前の [FAULT] / [TRACE] の行だけ。走行ではない
                 run = Run(path=path, boot=len(runs) + 1)
                 runs.append(run)
                 run.cond, run.cond_name = m.group(1), m.group(2)
@@ -191,7 +211,12 @@ def parse_log(path: Path) -> list[Run]:
                 after_ready = False
                 continue
             if run is None:
-                continue
+                if not text.strip():
+                    continue
+                run = Run(path=path, boot=len(runs) + 1)      # CONFIG: 行の無い走行
+                runs.append(run)
+                in_final = False
+                after_ready = False
 
             if in_final:
                 if RE_RULE.match(text):
@@ -224,10 +249,17 @@ def parse_log(path: Path) -> list[Run]:
                 continue
             if RE_READY.match(text):
                 after_ready = True
+                run.ready_seen = True
                 run.t_ready = t
                 continue
             if text.startswith("tap: window lost"):
                 run.n_lost_lines += 1
+                continue
+            if RE_JSON.match(text):
+                j = json.loads(text)
+                run.cls_lines[j["cls"]] += 1          # READY 前の行も数える (FINAL の out と同じ範囲)
+                if after_ready:
+                    run.lat_ms.append(int(j["lat_ms"]))
                 continue
             if not after_ready:
                 continue
@@ -236,9 +268,6 @@ def parse_log(path: Path) -> list[Run]:
             if m:
                 g = m.groups()
                 run.rates.append((int(g[0]), int(g[1]), int(g[3]), int(g[4]), int(g[6]) if g[6] else None))
-                continue
-            if RE_JSON.match(text):
-                run.lat_ms.append(int(json.loads(text)["lat_ms"]))
                 continue
             m = RE_LCD.match(text)
             if m:
@@ -264,6 +293,8 @@ def select_newest(runs: list[Run]) -> tuple[dict[str, Run], list[tuple[Run, str]
     chosen: dict[str, Run] = {}
     unused: list[tuple[Run, str]] = []
     for run in runs:                      # sorted(paths) の順 = ファイル名順、起動順
+        if not run.has_config:
+            continue
         if not run.complete:
             unused.append((run, run.why_unusable))
             continue
@@ -288,7 +319,7 @@ def select_pinned(runs: list[Run]) -> tuple[dict[str, Run], list[tuple[Run, str]
         if cands[-1].cond != cond:
             errors.append(f"{fname} の CONFIG は {cands[-1].cond} で、固定した条件 {cond} と違う")
     for run in runs:
-        if any(run is c for c in chosen.values()):
+        if not run.has_config or any(run is c for c in chosen.values()):
             continue
         unused.append((run, run.why_unusable if not run.complete else "表に使うログを固定している（PINNED）"))
     return chosen, unused, errors
@@ -303,6 +334,49 @@ def fmt_dur(a: float | None, b: float | None) -> str:
     if d < 0:
         d += 24 * 3600     # 日付をまたいだ
     return f"{int(d // 60)}:{int(d % 60):02d}"
+
+
+def dur_s(a: float | None, b: float | None) -> float | None:
+    if a is None or b is None:
+        return None
+    d = b - a
+    if d < 0:
+        d += 24 * 3600     # 日付をまたいだ
+    return d
+
+
+def per_hour(n: int, secs: float | None) -> str:
+    return f"{n * 3600.0 / secs:.0f} 件/時" if secs else "- 件/時"
+
+
+def run_summary(run: Run) -> list[str]:
+    """走行 1 本の通知の集計 (3.5)。通知の総数はボードのカウンタ (FINAL の notify out)、
+    クラス別は JSON 行を数えたもの。両者の差はレポータが捨てた行 (READY 前の CSV ダンプ中。D では満杯のキュー)"""
+    nt = run.final.get("notify")
+    secs = dur_s(run.t_ready, run.t_final)
+    n_lines = sum(run.cls_lines.values())
+    n_unknown = run.cls_lines.get("unknown", 0)
+    n_detect = n_lines - n_unknown
+    out = [f"走行集計: {run.name}  CONFIG: {run.config_line()}"]
+    if not run.final_seen:
+        out.append("  FINAL が無い (途中で止めたログ)。JSON 行だけ数える")
+    out.append(f"  走行時間 READY→FINAL: {fmt_dur(run.t_ready, run.t_final)}"
+               + (f" ({secs:.1f} s)" if secs is not None else " (時刻なし。log.ps1 -Timestamp のログでないと件/時は出ない)"))
+    if nt:
+        n_out = nt["out"]
+        out.append(f"  通知 (JSON 行、FINAL の notify out): {n_out} 件 = {per_hour(n_out, secs)}")
+        diff = n_out - n_lines
+        note = f"（ログ上の JSON 行は {n_lines}。差 {diff} は reporter が捨てた行 = READY 前のダンプ中、D では満杯のキュー）" if diff else ""
+    else:
+        out.append(f"  通知 (ログ上の JSON 行): {n_lines} 件 = {per_hour(n_lines, secs)}")
+        note = ""
+    by_cls = " / ".join(f"{c} {n}" for c, n in sorted(run.cls_lines.items(), key=lambda kv: (-kv[1], kv[0])))
+    out.append(f"    クラス別: {by_cls or '-'}{note}")
+    out.append(f"    検出 (unknown を除く): {n_detect} 件 = {per_hour(n_detect, secs)} / unknown: {n_unknown} 件")
+    if nt:
+        out.append(f"  gated {nt['gated']} / held {nt['held']} / offlist {nt['offlist']}  (FINAL。gated=音量の門で止めた窓、"
+                   f"held=unknown が続いて出さなかった窓、offlist=通知対象外のクラスの窓)")
+    return out
 
 
 def med(xs: list[int]) -> str:
@@ -416,6 +490,11 @@ def build_doc(chosen: dict[str, Run], unused: list[tuple[Run, str]], how: str, n
         lines.append("")
     if n_no_config:
         lines += [f"CONFIG: 行の無いログ（スイッチを入れる前のもの）{n_no_config} 本は読み飛ばした。", ""]
+    lines += ["## 走行集計（通知の件数と 1 時間あたりの件数）", "",
+              "3.5 の誤報対策の前後を同じ形式で比べるためのもの。通知の総数は FINAL の notify out、クラス別は JSON 行の数。", "", "```"]
+    for c in cond_order(chosen):
+        lines += run_summary(chosen[c])
+    lines += ["```", ""]
     lines += ["## 付録: FINAL ブロックの本文（ログのまま）", ""]
     for c in cond_order(chosen):
         r = chosen[c]
@@ -448,9 +527,8 @@ def main() -> int:
     if not paths:
         print(f"ログが無い: {args.logs_dir}", file=sys.stderr)
         return 1
-    n_files = len([p for p in paths if p.is_file()])
     runs = load_runs(paths)
-    n_no_config = n_files - len({r.path for r in runs})
+    n_no_config = len([r for r in runs if not r.has_config])
 
     if args.logs:
         chosen, unused = select_newest(runs)
@@ -466,10 +544,16 @@ def main() -> int:
         if errors:
             return 1
     if not chosen:
-        print("CONFIG: 行と完全な FINAL ブロックの両方があるログが無い", file=sys.stderr)
+        # 表は作れない。走行集計だけ出す (対策前のログのように CONFIG: 行が無いものはここに来る)
+        print("CONFIG: 行と完全な FINAL ブロックの両方があるログが無い (3-1 の表は作らない)", file=sys.stderr)
         for r, why in unused:
             print(f"  {r.name} ({r.cond}): {why}", file=sys.stderr)
-        return 1
+        if not runs:
+            return 1
+        for r in runs:
+            print("\n".join(run_summary(r)))
+            print()
+        return 0
     missing_conds = [c for c in ("A", "B", "D") if c not in chosen]
     for c in missing_conds:
         print(f"[warn] 条件 {c} の使えるログが無い", file=sys.stderr)
@@ -479,6 +563,10 @@ def main() -> int:
     print()
     for r, why in unused:
         print(f"使わなかった: {r.name} ({r.cond}): {why}")
+    print()
+    for r in (runs if args.logs else [chosen[c] for c in cond_order(chosen)]):
+        print("\n".join(run_summary(r)))
+        print()
     if str(args.out) != "-":
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(doc, encoding="utf-8", newline="\n")
