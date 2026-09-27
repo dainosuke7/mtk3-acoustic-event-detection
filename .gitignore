@@ -24,5 +24,5 @@ __pycache__/
 
 # ESC-50 の録音から作った NPU の比較用入力 (scripts/aed_clips.py の生成物)。
 # 元の音声のライセンス (CC BY / CC BY-NC) のため入れない。スクリプトで再生成する
-mtk3bsp2_stm32n657/Appli/Application/npu/aed_test_clips.h
-mtk3bsp2_stm32n657/Appli/Application/aed/aed_ref_clips.h
+mtk3bsp2_stm32n657/Appli/Application/npu/model_*/aed_test_clips.h
+mtk3bsp2_stm32n657/Appli/Application/npu/model_*/aed_ref_clips.h

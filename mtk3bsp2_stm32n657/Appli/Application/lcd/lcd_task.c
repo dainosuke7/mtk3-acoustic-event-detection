@@ -32,11 +32,8 @@
 
 #define POLL_MIN_MS	(10)		/* 待ちの下限 (時間の計算が 0 以下になったとき) */
 
-/* 画面に出す短い英字。並びは notify.h のクラス番号 (モデルの出力順) */
-LOCAL const char *const disp_name[AED_CLASSES] = {
-	"CHAINSAW", "CLOCK", "FIRE", "BABY", "DOG",
-	"HELI", "RAIN", "ROOSTER", "WAVES", "SNEEZE"
-};
+/* 画面に出す短い英字。並びはモデルの出力順 (aed_model.h で選んだ model_<name>/aed_model_cfg.h の AED_DISP_NAMES) */
+LOCAL const char *const disp_name[AED_CLASSES] = AED_DISP_NAMES;
 
 typedef struct {
 	INT	cls;

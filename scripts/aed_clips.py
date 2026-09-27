@@ -9,19 +9,27 @@ Phase 1 タスク6: NPU の推論が正しいかを、実録音 30 本の1位ク
 ここで作る log-mel の Python 実装は、タスク8 でボード側に前処理を移植するときの参照にもなる。
 
 使い方 (uv が依存パッケージを用意する):
-    uv run scripts/aed_clips.py <STM32N6-GettingStarted-Audio> <ESC-50>
+    uv run scripts/aed_clips.py <STM32N6-GettingStarted-Audio> <ESC-50>                       ESC10 版 (既定)
+    uv run --with tensorflow scripts/aed_clips.py --model fsd50k <ESC-50>                    FSD50K 版 (5-1)
 
-    <STM32N6-GettingStarted-Audio>: v2.3.0 のリポジトリ (モデルと前処理の設定・表を読む)
-    <ESC-50>: github.com/karolpiczak/ESC-50 のリポジトリ (meta/esc50.csv と下の 30 本の wav)
+    <STM32N6-GettingStarted-Audio>: v2.3.0 のリポジトリ (ESC10 版のモデルと前処理の設定・表を読む)
+    <ESC-50>: github.com/karolpiczak/ESC-50 のリポジトリ (meta/esc50.csv と下の wav)
 
-出力: mtk3bsp2_stm32n657/Appli/Application/npu/aed_test_clips.h
+出力 (ESC10 版。MODEL_DIR = mtk3bsp2_stm32n657/Appli/Application/npu/model_esc10):
+    MODEL_DIR/aed_test_clips.h
       30 本の int8 入力と PC の1位 (NPU の推論の判定用。npu_selftest.c の clips_check)。
       ROM が足りないときは npu_selftest.c の AED_USE_TEST_CLIPS を 0 にしてビルドから外す
-    mtk3bsp2_stm32n657/Appli/Application/aed/aed_ref_clips.h
+    MODEL_DIR/aed_ref_clips.h
       上のうち2本ぶんの生 PCM も入れたもの (ボードの前処理を突き合わせる用。タスク8。
       infer_task.c の preproc_test)
-    どちらも ESC-50 由来のデータを含むのでリポジトリには入れない (.gitignore 済み)。
-    無ければボード側はその確認を飛ばす (__has_include)。
+出力 (FSD50K 版。MODEL_DIR = .../npu/model_fsd50k。モデルは MODEL_DIR の tflite、--tflite で別の場所も可):
+    MODEL_DIR/aed_test_input.h   乱数入力 (seed 2026) と tflite の期待値 (scripts/aed_ref.py と同じ形式)
+    MODEL_DIR/aed_ref_clips.h    play test のクリップのうち 2 本 (生 PCM + int8 テンソル + PC の1位)
+    tflite は TensorFlow Lite の 2 つの実装 (最適化カーネル = ort、参照カーネル = noopt) で回す
+    (ESC10 版の ONNX Runtime の最適化あり / なしにあたる)。int8 化はモデル自身の入力の scale / zero_point
+    aed_test_clips.h (30 本) は FSD50K 版では作らない (ESC-50 に対応するクラスが 3 つしかない)
+    aed_ref_clips.h / aed_test_clips.h は ESC-50 由来のデータを含むのでリポジトリには入れない
+    (.gitignore 済み)。無ければボード側はその確認を飛ばす (__has_include)。
 
 前処理 (ST の GettingStarted-Audio と同じ。確認箇所は各関数のコメント):
     int16 16kHz の先頭 15600 サンプル → 96 列 (ホップ 160、窓 400)
@@ -96,11 +104,43 @@ LEVEL_MARGIN_DB = 6.0
 REF_CLIPS = ["5-203128-A-0.wav", "5-201194-A-38.wav"]
 REF_MIN_PROB = 0.999
 
+# ---------------------------------------------------------------------------
+# FSD50K 版 (5-1)。モデルは ST model zoo の yamnet_e256_64x96_tl (FSD50K の 5 クラス、unknown 無し)。
+# 出力の並びは config の class_names ['Speech', 'Gunshot_and_gunfire', 'Crying_and_sobbing', 'Knock', 'Glass']
+# を昇順に並べたもの (ESC10 版と同じ規則。ESC10 の config も class_names は dog, chainsaw, ... の順だが
+# モデルの出力は chainsaw, clock_tick, ... の昇順で、ESC-10 の 30 本で 29/30 正解だった)。
+# この並びで正しいことは、下の CLIPS_FSD50K (ESC-50 の knock / glass / crying_baby) の PC の1位で毎回確かめる
+CLASSES_FSD50K = ["Crying_and_sobbing", "Glass", "Gunshot_and_gunfire", "Knock", "Speech"]
+CLASSES_FSD50K_CONFIG_ORDER = ["Speech", "Gunshot_and_gunfire", "Crying_and_sobbing", "Knock", "Glass"]
+
+# play test (scripts/aed_play_test.py --model fsd50k) で鳴らすクリップ。ESC-50 の fold 5 (ESC-10 に限らない)。
+# 通知対象 3 クラスに対応する door_wood_knock (30) / glass_breaking (39) / crying_baby (20) を各 2 本と、
+# 対象外の clock_tick (38) を 2 本。元の録音 (src_file) が違うものを選ぶ
+CLIPS_FSD50K = {
+    "door_wood_knock": ["5-218980-A-30.wav", "5-235644-A-30.wav"],
+    "glass_breaking":  ["5-221528-A-39.wav", "5-233605-A-39.wav"],
+    "crying_baby":     ["5-151085-A-20.wav", "5-198411-B-20.wav"],
+    "clock_tick":      ["5-201194-A-38.wav", "5-208624-A-38.wav"],
+}
+PLAY_ORDER_FSD50K = ["door_wood_knock", "glass_breaking", "crying_baby", "clock_tick"]
+# ESC-50 のカテゴリ → FSD50K 版のクラス (None は対象外 = 正解なし)
+TRUTH_FSD50K = {"door_wood_knock": "Knock", "glass_breaking": "Glass", "crying_baby": "Crying_and_sobbing",
+                "clock_tick": None}
+# ボードの前処理を突き合わせる 2 本 (FSD50K 版の aed_ref_clips.h)。knock と glass: どちらも新しいクラスで、
+# 短く鋭い音 (knock) と広帯域で長い音 (glass) の対照。PC の1位が正解で p >= REF_MIN_PROB_FSD50K のこと
+REF_CLIPS_FSD50K = ["5-218980-A-30.wav", "5-221528-A-39.wav"]
+REF_MIN_PROB_FSD50K = 0.9
+
 REPO = Path(__file__).resolve().parent.parent
-OUT_H = REPO / "mtk3bsp2_stm32n657" / "Appli" / "Application" / "npu" / "aed_test_clips.h"
-SELFTEST_C = OUT_H.parent / "npu_selftest.c"
-INFER_TASK_C = OUT_H.parent / "infer_task.c"
-REF_OUT_H = OUT_H.parent.parent / "aed" / "aed_ref_clips.h"
+NPU_DIR = REPO / "mtk3bsp2_stm32n657" / "Appli" / "Application" / "npu"
+OUT_H = NPU_DIR / "model_esc10" / "aed_test_clips.h"
+SELFTEST_C = NPU_DIR / "npu_selftest.c"
+INFER_TASK_C = NPU_DIR / "infer_task.c"
+REF_OUT_H = NPU_DIR / "model_esc10" / "aed_ref_clips.h"
+FSD50K_DIR = NPU_DIR / "model_fsd50k"
+FSD50K_TFLITE = FSD50K_DIR / "yamnet_e256_64x96_tl_int8.tflite"
+FSD50K_TEST_INPUT_H = FSD50K_DIR / "aed_test_input.h"
+FSD50K_REF_OUT_H = FSD50K_DIR / "aed_ref_clips.h"
 MODEL_REL = Path("Projects/X-CUBE-AI/models/yamnet_1024_64x96_tl_qdq_int8.onnx")
 CONFIG_REL = Path("Projects/Dpu/ai_model_config.h.aed")
 TABLES_REL = Path("Projects/Dpu/user_mel_tables.c.aed")
@@ -236,10 +276,10 @@ def read_meta(esc50: Path) -> dict[str, dict]:
         return {r["filename"]: r for r in csv.DictReader(f)}
 
 
-def clip_path(meta: dict[str, dict], fn: str, label: str, esc50: Path) -> Path:
-    """CLIPS の1本がメタデータ (クラス・ESC-10・fold 5) と合っているか確かめ、wav の場所を返す。"""
+def clip_path(meta: dict[str, dict], fn: str, label: str, esc50: Path, esc10: bool = True) -> Path:
+    """CLIPS の1本がメタデータ (クラス・ESC-10 (esc10=True のとき)・fold 5) と合っているか確かめ、wav の場所を返す。"""
     r = meta.get(fn)
-    if r is None or r["category"] != label or r["esc10"] != "True":
+    if r is None or r["category"] != label or (esc10 and r["esc10"] != "True"):
         sys.exit(f"{fn}: ESC-50 のメタデータと合わない")
     if r["fold"] != "5":
         sys.exit(f"{fn}: fold {r['fold']} (このスクリプトは fold 5 を前提にしている)")
@@ -306,26 +346,37 @@ def c_rows(values, per_line: int, indent: str = "\t\t") -> str:
                      for i in range(0, len(values), per_line))
 
 
-def write_ref_header(clips: list[dict], sha256: str, scale: np.float32, zp: int, tables_note: str) -> list[dict]:
-    """前処理をボードで突き合わせる2本 (生 PCM + PC の int8 テンソル + PC の1位) を出す。"""
-    import onnxruntime as ort
+def write_ref_header(clips: list[dict], scale: np.float32, zp: int, tables_note: str,
+                     out_h: Path = REF_OUT_H, ref_files: list[str] = REF_CLIPS, classes: list[str] = CLASSES,
+                     model_lines: list[str] | None = None, pc_a: str | None = None, pc_b: str | None = None,
+                     min_prob: float = REF_MIN_PROB) -> list[dict]:
+    """前処理をボードで突き合わせる2本 (生 PCM + PC の int8 テンソル + PC の1位) を出す。
+    既定 (引数なし) は ESC10 版。FSD50K 版は out_h / ref_files / classes / model_lines / pc_a / pc_b を渡す"""
+    if model_lines is None:
+        import onnxruntime as ort
+        model_lines = ["yamnet_1024_64x96_tl_qdq_int8.onnx (ESC-10) sha256 " + clips[0].get("sha256", "")]
+        pc_a = f"ONNX Runtime {ort.__version__} (CPU) の既定の最適化"
+        pc_b = f"ONNX Runtime {ort.__version__} (CPU) の最適化なし"
 
     by_file = {c["file"]: c for c in clips}
     ref = []
-    for fn in REF_CLIPS:
+    for fn in ref_files:
         c = by_file.get(fn)
         if c is None:
             sys.exit(f"REF_CLIPS の {fn} が CLIPS に無い")
+        if c["truth"] < 0:
+            sys.exit(f"{fn}: 対象外のクラスは前処理の突き合わせに使えない")
         if c["top_ort"] != c["truth"] or c["top_noopt"] != c["truth"]:
             print(f"(!) {fn}: PC の1位が正解と違う (前処理の突き合わせには向かない)")
-        elif min(c["p_ort"], c["p_noopt"]) < REF_MIN_PROB:
-            print(f"(!) {fn}: PC の確率が {min(c['p_ort'], c['p_noopt']):.3f} < {REF_MIN_PROB}"
+        elif min(c["p_ort"], c["p_noopt"]) < min_prob:
+            print(f"(!) {fn}: PC の確率が {min(c['p_ort'], c['p_noopt']):.3f} < {min_prob}"
                   f" (1位が入れ替わりやすい)")
         ref.append(c)
 
     arr = lambda key, fmt: ", ".join(fmt(c[key]) for c in ref)
     pcm = "\n".join(f"\t{{ /* {c['file']} ({c['label']}) */\n" + c_rows(c["pcm"], 16) + "\n\t}," for c in ref)
     ten = "\n".join(f"\t{{ /* {c['file']} ({c['label']}) */\n" + c_rows(c["q"].reshape(-1), 32) + "\n\t}," for c in ref)
+    model_txt = "\n".join((" *   モデル: " if i == 0 else " *           ") + line for i, line in enumerate(model_lines))
     text = f"""/* 自動生成: scripts/aed_clips.py。手で編集しない。ESC-50 由来のデータを含むのでコミットしない */
 #ifndef AED_REF_CLIPS_H
 #define AED_REF_CLIPS_H
@@ -333,25 +384,23 @@ def write_ref_header(clips: list[dict], sha256: str, scale: np.float32, zp: int,
 #include <stdint.h>
 
 /*
- * ボードの前処理 (Application/aed/preproc.c) を PC と突き合わせるための実録音 {len(ref)} 本
- * (Phase 1 タスク8。使うのは infer_task.c の preproc_test)
- *   音声:   ESC-50 (K. J. Piczak, github.com/karolpiczak/ESC-50) の ESC-10 サブセット、fold 5。
+ * ボードの前処理 (Application/aed/preproc.c) を PC と突き合わせるための実録音 {len(ref)} 本 (タスク8)
+ *   音声:   ESC-50 (K. J. Piczak, github.com/karolpiczak/ESC-50) fold 5。
  *           ESC-10 は CC BY 3.0、ESC-50 全体は CC BY-NC 3.0 (各クリップの出典は ESC-50 の LICENSE)
  *   pcm:    16kHz int16 に直した先頭 {N_SAMPLES} サンプル (ボードの前処理に入れる生の音)
  *   tensor: その pcm を PC が log-mel にした int8 (scripts/aed_clips.py の logmel_q8)。
  *           ボードの前処理の結果と 1 バイトずつ比べる。並びは [メル 0..63][列 0..95]
  *           {tables_note}
- *   量子化: scale={float(scale):.9g}, zero_point={zp} (Application/aed/preproc.h の値と一致すること)
- *   1位:    上の tensor を入れたときの ONNX Runtime {ort.__version__} (CPU) の1位と確率。
- *           ort = 既定の最適化、noopt = 最適化なし
- *   モデル: yamnet_1024_64x96_tl_qdq_int8.onnx sha256 {sha256}
+ *   量子化: scale={float(scale):.9g}, zero_point={zp} (モデルの入力の値。ボードは stai_network_get_info の値と照合する)
+ *   1位:    上の tensor を入れたときの PC の1位と確率。ort = {pc_a}、noopt = {pc_b}
+{model_txt}
  * static な配列なので、include するのは1つの .c だけにする。
  */
 
 #define AED_REF_CLIP_COUNT	({len(ref)})
 #define AED_REF_SAMPLES		({N_SAMPLES})
 #define AED_REF_TENSOR_LEN	({N_MELS * N_COLS})
-#define AED_REF_CLASSES		({len(CLASSES)})
+#define AED_REF_CLASSES		({len(classes)})
 #define AED_REF_SCALE		({float(scale):.9g}f)
 #define AED_REF_ZP		({zp})
 
@@ -369,7 +418,7 @@ static const char *const aed_ref_file[AED_REF_CLIP_COUNT] = {{
 	{arr("file", lambda v: f'"{v}"')}
 }};
 
-/* 正解のクラス番号 (ESC-50 のラベル) */
+/* 正解のクラス番号 (ESC-50 のラベルをモデルのクラスに対応させたもの) */
 static const uint8_t aed_ref_truth[AED_REF_CLIP_COUNT] = {{
 	{arr("truth", str)}
 }};
@@ -390,13 +439,13 @@ static const float aed_ref_prob_noopt[AED_REF_CLIP_COUNT] = {{
 
 /* クラス名 (並びは aed_test_input.h の aed_test_class_names と同じ) */
 static const char *const aed_ref_class_names[AED_REF_CLASSES] = {{
-	{", ".join(f'"{n}"' for n in CLASSES)}
+	{", ".join(f'"{n}"' for n in classes)}
 }};
 
 #endif	/* AED_REF_CLIPS_H */
 """
-    REF_OUT_H.parent.mkdir(parents=True, exist_ok=True)
-    REF_OUT_H.write_text(text, encoding="utf-8", newline="\n")
+    out_h.parent.mkdir(parents=True, exist_ok=True)
+    out_h.write_text(text, encoding="utf-8", newline="\n")
     return ref
 
 
@@ -459,26 +508,21 @@ static const float aed_clip_prob_noopt[AED_CLIP_COUNT] = {{
     OUT_H.write_text(text, encoding="utf-8", newline="\n")
 
 
-def main() -> None:
+def main_esc10(gs_audio: Path, esc50: Path) -> None:
     import onnx
 
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("gs_audio", type=Path, help="STM32N6-GettingStarted-Audio (v2.3.0) のディレクトリ")
-    ap.add_argument("esc50", type=Path, help="ESC-50 のディレクトリ")
-    args = ap.parse_args()
-
-    check_st_config(args.gs_audio / CONFIG_REL)
+    check_st_config(gs_audio / CONFIG_REL)
     win = hann_periodic(WIN)
     fb = mel_filterbank()
-    tables_note = check_st_tables(args.gs_audio / TABLES_REL, win, fb)
+    tables_note = check_st_tables(gs_audio / TABLES_REL, win, fb)
 
-    blob = (args.gs_audio / MODEL_REL).read_bytes()
+    blob = (gs_audio / MODEL_REL).read_bytes()
     sha256 = hashlib.sha256(blob).hexdigest()
     name, scale, zp = onnx_input(onnx.load_from_string(blob))
     inv_scale = np.float32(1.0) / scale        # ai_dpu.c:170 の 1 / scale (ST は FP16 に丸める)
     sess = sessions(blob)
 
-    meta = read_meta(args.esc50)
+    meta = read_meta(esc50)
 
     print(f"ST config  : {CONFIG_REL} matches (16kHz, {N_MELS} mel x {N_COLS} col, hop {HOP}, "
           f"win {WIN}, nfft {N_FFT}, HTK {FMIN}-{FMAX}Hz, magnitude, log)")
@@ -490,12 +534,12 @@ def main() -> None:
     clips = []
     for label in CLASSES:
         for fn in CLIPS[label]:
-            path = clip_path(meta, fn, label, args.esc50)
+            path = clip_path(meta, fn, label, esc50)
             x, lvl, lvl_all = read_wav_16k(path)
             warn = " (!) quiet start" if lvl < lvl_all - LEVEL_MARGIN_DB else ""
             q = logmel_q8(x, win, fb, inv_scale, zp)
             xin = ((q.astype(np.float32) - np.float32(zp)) * scale).reshape(1, N_MELS, N_COLS, 1)
-            c = {"file": fn, "label": label, "truth": CLASSES.index(label), "q": q, "pcm": x}
+            c = {"file": fn, "label": label, "truth": CLASSES.index(label), "q": q, "pcm": x, "sha256": sha256}
             for mode, s in sess.items():
                 y = s.run(None, {name: xin})[0].reshape(-1)
                 c[f"top_{mode}"] = int(y.argmax())
@@ -512,14 +556,179 @@ def main() -> None:
     print(f"PC top-1 == truth: ort {acc_ort}/{n}, noopt {acc_noopt}/{n}; ort == noopt: {agree}/{n}")
 
     write_header(clips, sha256, scale, zp, tables_note)
-    ref = write_ref_header(clips, sha256, scale, zp, tables_note)
+    ref = write_ref_header(clips, scale, zp, tables_note)
     # ボード側はヘッダが無いと __has_include で読まない。ヘッダ無しでビルドした後だと
     # 依存関係 (.d) にヘッダが載っておらず make が作り直さないので、.c の更新時刻を進める
     SELFTEST_C.touch()
     INFER_TASK_C.touch()
     print(f"wrote {OUT_H.relative_to(REPO)} ({n} x {N_MELS * N_COLS} B), touched {SELFTEST_C.name}")
-    print(f"wrote {REF_OUT_H.relative_to(REPO)} ({len(ref)} x ({N_SAMPLES} x int16 + {N_MELS * N_COLS} B): "
-          f"{', '.join(c['file'] for c in ref)}), touched {INFER_TASK_C.name}")
+    print(f"wrote {REF_OUT_H.relative_to(REPO)} ({len(ref)} clips with PCM), touched {INFER_TASK_C.name}")
+
+
+# ---------------------------------------------------------------------------
+# FSD50K 版: TensorFlow Lite
+
+def tflite_interpreters(path: Path) -> tuple[dict, str]:
+    """tflite を 2 つの実装で開く。ort = 最適化カーネル (XNNPACK デリゲートは外す。中間テンソルを読むため)、
+    noopt = 参照カーネル (BUILTIN_REF)。どちらも中間テンソル (softmax 直前の int8) を残す"""
+    try:
+        import tensorflow as tf
+    except ImportError:
+        sys.exit("tensorflow が無い: uv run --with tensorflow scripts/aed_clips.py --model fsd50k ... で実行する")
+    R = tf.lite.experimental.OpResolverType
+    its = {}
+    for mode, rt in (("ort", R.BUILTIN_WITHOUT_DEFAULT_DELEGATES), ("noopt", R.BUILTIN_REF)):
+        it = tf.lite.Interpreter(model_path=str(path), experimental_op_resolver_type=rt,
+                                 experimental_preserve_all_tensors=True, num_threads=1)
+        it.allocate_tensors()
+        its[mode] = it
+    return its, tf.__version__
+
+
+def tflite_io(it) -> dict:
+    """入力 (int8 1x64x96x1) と出力 (float32 1xN) と softmax 直前の int8 テンソルの番号・量子化。"""
+    inp = it.get_input_details()
+    out = it.get_output_details()
+    if len(inp) != 1 or len(out) != 1:
+        sys.exit(f"入出力が 1 つずつでない: {len(inp)} / {len(out)}")
+    if inp[0]["dtype"] != np.int8 or tuple(inp[0]["shape"]) != (1, N_MELS, N_COLS, 1):
+        sys.exit(f"入力が int8 1x{N_MELS}x{N_COLS}x1 でない: {inp[0]['dtype']} {inp[0]['shape']}")
+    if out[0]["dtype"] != np.float32:
+        sys.exit(f"出力が float32 でない: {out[0]['dtype']} (config の quantization_output_type を確認)")
+    scale, zp = inp[0]["quantization"]
+    sm = [o for o in it._get_ops_details() if o["op_name"] == "SOFTMAX"]
+    if len(sm) != 1:
+        sys.exit(f"SOFTMAX が 1 つでない: {len(sm)} (デリゲートで融合されていないこと)")
+    l_idx = int(sm[0]["inputs"][0])
+    l_scale, l_zp = it.get_tensor_details()[l_idx]["quantization"]
+    return {"in": inp[0]["index"], "out": out[0]["index"], "n_out": int(out[0]["shape"][-1]),
+            "scale": np.float32(scale), "zp": int(zp), "logit": l_idx,
+            "l_scale": np.float32(l_scale), "l_zp": int(l_zp)}
+
+
+def tflite_run(it, io: dict, q: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """int8 q [64][96] を入れて (softmax 後 float32, softmax 直前 int8) を返す。"""
+    it.set_tensor(io["in"], q.reshape(1, N_MELS, N_COLS, 1).astype(np.int8))
+    it.invoke()
+    y = it.get_tensor(io["out"]).reshape(-1).astype(np.float32)
+    lq = it.get_tensor(io["logit"]).reshape(-1).astype(np.int8)
+    return y, lq
+
+
+def main_fsd50k(esc50: Path, tflite: Path, gs_audio: Path | None) -> None:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from aed_ref import SEED, SHAPE, write_test_input_header
+
+    win = hann_periodic(WIN)
+    fb = mel_filterbank()
+    if gs_audio is not None:
+        tables_note = check_st_tables(gs_audio / TABLES_REL, win, fb)
+    else:
+        tables_note = ("window / mel tables built by this script (same parameters as the FSD50K config: "
+                       "hann 400, nfft 512, hop 160, HTK 125-7500Hz, norm None, power 1.0; "
+                       "not re-checked against ST tables, pass <GettingStarted-Audio> with --gs-audio to check)")
+
+    blob = tflite.read_bytes()
+    sha256 = hashlib.sha256(blob).hexdigest()
+    its, tf_ver = tflite_interpreters(tflite)
+    io = tflite_io(its["ort"])
+    io2 = tflite_io(its["noopt"])
+    if (io["scale"], io["zp"], io["n_out"], io["logit"]) != (io2["scale"], io2["zp"], io2["n_out"], io2["logit"]):
+        sys.exit("2 つの実装で入出力の情報が違う")
+    if io["n_out"] != len(CLASSES_FSD50K):
+        sys.exit(f"出力が {io['n_out']} クラス (CLASSES_FSD50K は {len(CLASSES_FSD50K)})")
+    scale, zp = io["scale"], io["zp"]
+    inv_scale = np.float32(1.0) / scale
+    pc = {"ort": f"TensorFlow Lite {tf_ver} 最適化カーネル (BUILTIN、デリゲートなし)",
+          "noopt": f"TensorFlow Lite {tf_ver} 参照カーネル (BUILTIN_REF)"}
+    model_lines = [f"{tflite.name} (ST model zoo audio_event_detection/yamnet/ST_pretrainedmodel_public_dataset/"
+                   f"fsd50k/yamnet_e256_64x96_tl/without_unknown_class、Apache-2.0)", f"sha256 {sha256}"]
+
+    print(f"model      : {tflite.name} sha256 {sha256[:16]}..., input int8 scale={float(scale):.9g} zp={zp}, "
+          f"output float32 x{io['n_out']}, softmax input tensor #{io['logit']} scale={float(io['l_scale']):.9g} zp={io['l_zp']}")
+    print(f"tflite     : {pc['ort']} / {pc['noopt']}")
+    print(f"tables     : {tables_note}")
+
+    # ---- 乱数入力 (seed 2026。ESC10 版の aed_ref.py と同じ生成) → aed_test_input.h
+    q = np.random.default_rng(SEED).integers(-128, 128, size=SHAPE, dtype=np.int8)
+    y_a, l_a = tflite_run(its["ort"], io, q)
+    y_b, l_b = tflite_run(its["noopt"], io, q)
+    print()
+    print(f"random input (seed {SEED}): top1 ort {int(y_a.argmax())} {CLASSES_FSD50K[int(y_a.argmax())]} p={y_a.max():.4f}, "
+          f"noopt {int(y_b.argmax())} {CLASSES_FSD50K[int(y_b.argmax())]} p={y_b.max():.4f}, "
+          f"max |ort - noopt| = {np.abs(y_a - y_b).max():.6f}")
+    print(f"  logits int8 ort   {[int(v) for v in l_a]}")
+    print(f"  logits int8 noopt {[int(v) for v in l_b]}")
+    write_test_input_header(
+        FSD50K_TEST_INPUT_H, q, y_a, y_b, scale, zp, CLASSES_FSD50K, model_lines, pc["ort"], pc["noopt"],
+        "scripts/aed_clips.py --model fsd50k", l_a, l_b, io["l_scale"], io["l_zp"],
+        "tflite の SOFTMAX の入力 (int8)。第1は最適化カーネル、第2は参照カーネルの値")
+
+    # ---- クリップ (play test と同じ 8 本) → 並びの確認と aed_ref_clips.h
+    meta = read_meta(esc50)
+    print()
+    print(f"{'#':>2} {'file':<20} {'esc50 label':<16} {'truth':<19} {'lvl/all dB':>10} {'PC ort':<19} {'p':>6} {'PC noopt':<19} {'p':>6}")
+    clips = []
+    for label in PLAY_ORDER_FSD50K:
+        for fn in CLIPS_FSD50K[label]:
+            path = clip_path(meta, fn, label, esc50, esc10=False)
+            x, lvl, lvl_all = read_wav_16k(path)
+            warn = " (!) quiet start" if lvl < lvl_all - LEVEL_MARGIN_DB else ""
+            qc = logmel_q8(x, win, fb, inv_scale, zp)
+            truth_name = TRUTH_FSD50K[label]
+            c = {"file": fn, "label": label, "truth": CLASSES_FSD50K.index(truth_name) if truth_name else -1,
+                 "q": qc, "pcm": x, "sha256": sha256}
+            for mode, it in its.items():
+                y, _ = tflite_run(it, io, qc)
+                c[f"top_{mode}"] = int(y.argmax())
+                c[f"p_{mode}"] = float(y.max())
+            clips.append(c)
+            print(f"{len(clips) - 1:>2} {fn:<20} {label:<16} {truth_name or '-':<19} {lvl:4.0f}/{lvl_all:<4.0f}  "
+                  f"{CLASSES_FSD50K[c['top_ort']]:<19} {c['p_ort']:6.3f} "
+                  f"{CLASSES_FSD50K[c['top_noopt']]:<19} {c['p_noopt']:6.3f}{warn}")
+
+    # 出力の並びの確認: 正解のあるクリップの1位が、昇順の表と config の順の表のどちらに合うか
+    target = [c for c in clips if c["truth"] >= 0]
+    ok_sorted = sum(c["top_ort"] == c["truth"] for c in target)
+    ok_config = sum(CLASSES_FSD50K_CONFIG_ORDER[c["top_ort"]] == TRUTH_FSD50K[c["label"]] for c in target)
+    print()
+    print(f"class order check ({len(target)} clips with a truth): sorted order {ok_sorted}/{len(target)} correct, "
+          f"config order {ok_config}/{len(target)} correct"
+          + ("  -> sorted order (CLASSES_FSD50K) confirmed" if ok_sorted > ok_config else
+             "  (!) config order fits better: check CLASSES_FSD50K"))
+    agree = sum(c["top_ort"] == c["top_noopt"] for c in clips)
+    print(f"ort == noopt: {agree}/{len(clips)}")
+
+    ref = write_ref_header(clips, scale, zp, tables_note, out_h=FSD50K_REF_OUT_H, ref_files=REF_CLIPS_FSD50K,
+                           classes=CLASSES_FSD50K, model_lines=model_lines, pc_a=pc["ort"], pc_b=pc["noopt"],
+                           min_prob=REF_MIN_PROB_FSD50K)
+    SELFTEST_C.touch()
+    INFER_TASK_C.touch()
+    print(f"wrote {FSD50K_TEST_INPUT_H.relative_to(REPO)} (random input seed {SEED})")
+    print(f"wrote {FSD50K_REF_OUT_H.relative_to(REPO)} ({len(ref)} clips with PCM), touched {SELFTEST_C.name} {INFER_TASK_C.name}")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--model", choices=["esc10", "fsd50k"], default="esc10",
+                    help="esc10 (既定): <GettingStarted-Audio> <ESC-50> / fsd50k: <ESC-50>")
+    ap.add_argument("--tflite", type=Path, default=FSD50K_TFLITE,
+                    help=f"fsd50k のモデル (既定 {FSD50K_TFLITE.relative_to(REPO)})")
+    ap.add_argument("--gs-audio", type=Path, default=None,
+                    help="fsd50k のとき、ST の表と照合する STM32N6-GettingStarted-Audio (任意)")
+    ap.add_argument("paths", nargs="+", type=Path, help="esc10: <GettingStarted-Audio> <ESC-50> / fsd50k: <ESC-50>")
+    args = ap.parse_args()
+
+    if args.model == "esc10":
+        if len(args.paths) != 2:
+            sys.exit("esc10: <STM32N6-GettingStarted-Audio> <ESC-50> の 2 つを渡す")
+        main_esc10(args.paths[0], args.paths[1])
+    else:
+        if len(args.paths) != 1:
+            sys.exit("fsd50k: <ESC-50> の 1 つを渡す (モデルは --tflite、既定はリポジトリの model_fsd50k/)")
+        if not args.tflite.is_file():
+            sys.exit(f"tflite が無い: {args.tflite}")
+        main_fsd50k(args.paths[0], args.tflite, args.gs_audio)
 
 
 if __name__ == "__main__":

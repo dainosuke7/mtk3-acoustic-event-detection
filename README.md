@@ -105,8 +105,19 @@ uv run scripts/aed_clips.py <STM32N6-GettingStarted-Audio> <ESC-50>
 ```
 
 ST と同じ前処理（log-mel 64 x 96）で int8 入力を作り、ONNX Runtime の1位と一緒に
-`Appli/Application/npu/aed_test_clips.h` に書き出します（.gitignore 済み）。
+`Appli/Application/npu/model_esc10/aed_test_clips.h` に書き出します（.gitignore 済み）。
 前処理の設定と表は GettingStarted-Audio のものと毎回照合します。
+
+FSD50K 版（ブランチ model-fsd50k。モデルは `Appli/Application/npu/model_fsd50k/` に同梱、Apache-2.0）の参照ヘッダは
+tflite を TensorFlow Lite で回して作ります（TensorFlow は `--with` で足します）:
+
+```bash
+uv run --with tensorflow scripts/aed_clips.py --model fsd50k <ESC-50>
+```
+
+`model_fsd50k/aed_test_input.h`（乱数入力の期待値。コミット済み）と `model_fsd50k/aed_ref_clips.h`（ESC-50 の
+knock / glass の 2 本。コミットしない）を書き出し、ESC-50 のクリップでクラスの並びも確かめます。
+NPU 向けの network.c の生成（STEdgeAI Core 4.0 の stedgeai が必要）は `model_fsd50k/README.md` の手順です。
 
 ## ディレクトリ構成
 
@@ -165,7 +176,8 @@ CLAUDE.md               開発中の制約メモ
 | RK050HR18 Component Driver v1.0.1（`rk050hr18.h`） | STMicroelectronics | パネル（800x480、LTDC 直結）の解像度と同期タイミングの定義。`Appli/Application/lcd/st/` | BSD-3-Clause（同梱の `LICENSE.md`：3条項の本文。STM32CubeN6 の `LICENSE.md` でも「BSP Components」は BSD-3-Clause） | [STM32CubeN6 v1.3.0](https://github.com/STMicroelectronics/STM32CubeN6) のサブモジュール [stm32-rk050hr18](https://github.com/STMicroelectronics/stm32-rk050hr18) tag `v1.0.1`（commit `4ecf4fe`） | 無改変で同梱し、ヘッダ保持。ドライバ本体（`.c`）は元から存在せず、ヘッダのタイミング定義だけ（RGB 直結なのでパネル側のコマンド列が無い） |
 | STM32 Utilities Fonts（`font24.c`, `fonts.h`） | STMicroelectronics | LCD に描く 17x24 のビットマップフォント。`Appli/Application/lcd/st/` | BSD-3-Clause（同梱の `LICENSE.md`：Copyright 2014(-2019) ST、3条項の本文） | [STM32CubeN6 v1.3.0](https://github.com/STMicroelectronics/STM32CubeN6) の `Utilities/Fonts/` | 無改変で同梱し、ヘッダ保持。Font24 だけを使い、font8/12/16/20 は同梱しない |
 | STM32N6570-DK BSP（LCD 部分） | STMicroelectronics | `lcd.c` の LTDC タイミング・クロック経路・GPIO とパネル制御線の参照元（`stm32n6570_discovery_lcd.c`） | BSD-3-Clause（STM32CubeN6 の `LICENSE.md` で「BSP Drivers」） | [STM32CubeN6 v1.3.0](https://github.com/STMicroelectronics/STM32CubeN6) のサブモジュール [stm32n6570-dk-bsp](https://github.com/STMicroelectronics/stm32n6570-dk-bsp)（commit `f9c98f3`）の `stm32n6570_discovery_lcd.c` | ファイルは同梱せず、値と手順だけを `lcd.c` に書き起こした（参照箇所を file:line でソースのコメントに記載）。同梱しなかった理由: `BSP_LCD_InitEx` が L8（パレット）形式を選べず、DMA2D と BSP の設定ヘッダ一式を引きずるため |
-| ST Edge AI ランタイム（ll_aton 1.1.3-262、`NetworkRuntime1200_CM55_GCC.a`、ヘッダ）と生成済み AED ネットワーク（YAMNet 1024 派生。`network.c/.h`, `stai_network.c/.h`） | STMicroelectronics | NPU 推論ランタイムと、NPU 向けにコンパイル済みのモデル。`Appli/Application/npu/st/` | SLA0044（同梱の `npu/st/LICENSE.md` は GettingStarted-Audio の `Projects/LICENSE.md` の写し。同リポジトリの `LICENSE.md` で「AI Runtime」「Projects」は SLA0044） | STM32N6-GettingStarted-Audio v2.3.0（commit 46f1f97）の `Middlewares/ST/AI/Npu/ll_aton/`、`Middlewares/ST/AI/Npu/Devices/STM32N6xx/`、`Middlewares/ST/AI/Inc/`、`Middlewares/ST/AI/Lib/GCC/ARMCortexM55/`、`Projects/X-CUBE-AI/models/`（`*.aed`） | 無改変で同梱し、ヘッダ保持。同梱しなかったもの: RTOS 用 OSAL（FreeRTOS / ThreadX / Zephyr）とそのテンプレート、HAL_CACHEAXI に依存する `npu_cache.c`（`npu_cache_port.c` で置き換え）、`Inc/` のうちビルドで参照されない 44 本。SLA0044 は ST 製デバイス上での使用に限る条件で、本機は STM32N6 上でのみ動く。オープンソースライセンスの条件下に置くことは禁止（第5項）なので、本プロジェクトのコードに付けるライセンスの対象外とする |
+| ST Edge AI ランタイム（ll_aton 1.1.3-262、`NetworkRuntime1200_CM55_GCC.a`、ヘッダ）と生成済み AED ネットワーク（YAMNet 1024 派生。`network.c/.h`, `stai_network.c/.h`） | STMicroelectronics | NPU 推論ランタイムと、NPU 向けにコンパイル済みのモデル。`Appli/Application/npu/st/`（ESC10 版の生成物 `network.c/.h`, `stai_network.c/.h` は `npu/model_esc10/`） | SLA0044（同梱の `npu/st/LICENSE.md` は GettingStarted-Audio の `Projects/LICENSE.md` の写し。同リポジトリの `LICENSE.md` で「AI Runtime」「Projects」は SLA0044） | STM32N6-GettingStarted-Audio v2.3.0（commit 46f1f97）の `Middlewares/ST/AI/Npu/ll_aton/`、`Middlewares/ST/AI/Npu/Devices/STM32N6xx/`、`Middlewares/ST/AI/Inc/`、`Middlewares/ST/AI/Lib/GCC/ARMCortexM55/`、`Projects/X-CUBE-AI/models/`（`*.aed`） | 無改変で同梱し、ヘッダ保持。同梱しなかったもの: RTOS 用 OSAL（FreeRTOS / ThreadX / Zephyr）とそのテンプレート、HAL_CACHEAXI に依存する `npu_cache.c`（`npu_cache_port.c` で置き換え）、`Inc/` のうちビルドで参照されない 44 本。SLA0044 は ST 製デバイス上での使用に限る条件で、本機は STM32N6 上でのみ動く。オープンソースライセンスの条件下に置くことは禁止（第5項）なので、本プロジェクトのコードに付けるライセンスの対象外とする |
+| Yamnet 256 FSD50K 転移学習モデル（`yamnet_e256_64x96_tl_int8.tflite`、`yamnet_e256_64x96_tl_config.yaml`） | STMicroelectronics（元は Google の YAMNet。学習データは FSD50K） | FSD50K 版（ブランチ model-fsd50k）の AED モデル。Knock / Glass / Gunshot_and_gunfire / Crying_and_sobbing / Speech の 5 クラス。`Appli/Application/npu/model_fsd50k/` | Apache-2.0（同梱の `model_fsd50k/LICENSE.md` = model zoo の `audio_event_detection/yamnet/ST_pretrainedmodel_public_dataset/LICENSE.md`。`audio_event_detection/LICENSE.md` の表で確認） | github.com/STMicroelectronics/stm32ai-modelzoo `audio_event_detection/yamnet/ST_pretrainedmodel_public_dataset/fsd50k/yamnet_e256_64x96_tl/without_unknown_class/`（Git LFS） | 無改変で同梱、LICENSE 同梱。NPU 向けの生成物（network.c と重み）は stedgeai で作る（`model_fsd50k/README.md`） |
 
 ### Phase 2 で追加予定のもの
 

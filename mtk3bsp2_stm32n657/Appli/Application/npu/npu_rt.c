@@ -5,7 +5,8 @@
 #include <assert.h>		// __assert_func の宣言 (newlib)
 #include <string.h>		// memcpy
 #include "main.h"		// CMSIS (NVIC, SCB_CleanInvalidateDCache_by_Addr)
-#include "stai_network.h"	// st/model/ (ST 生成コード)
+#include "aed_model.h"		// AED_MODEL で選んだモデル (model_<name>/)
+#include AED_MODEL_STAI_NETWORK_H	// その stai_network.h (ST 生成コード)
 #include "ll_aton.h"		// startWatchdog / checkWatchdog の宣言、ATON_STD_IRQn
 #include "ll_aton_version.h"
 #include "npu_rt.h"
@@ -68,6 +69,9 @@ LOCAL STAI_NETWORK_CONTEXT_DECLARE(net, STAI_NETWORK_CONTEXT_SIZE)
 
 LOCAL BOOL		ready = FALSE;
 LOCAL BOOL		broken = FALSE;		/* タイムアウトして ll_aton が推論の途中のまま */
+LOCAL float		in_scale;		/* 入力 int8 の量子化 (stai_network_get_info)。前処理へ渡す */
+LOCAL INT		in_zp;
+LOCAL BOOL		in_quant_valid = FALSE;
 LOCAL B			*in_buf = NULL;
 LOCAL const float	*out_buf = NULL;
 LOCAL UW		timeouts = 0;		/* 書くのは推論を呼ぶタスクだけ */
@@ -245,6 +249,24 @@ EXPORT ER npu_rt_init(void)
 	show_tensor("input ", &info.inputs[0], (uintptr_t)in[0]);
 	show_tensor("output", &info.outputs[0], (uintptr_t)out[0]);
 
+	/*
+	 * 入力の量子化を前処理に渡すために覚える (モデルごとに違う。ESC10 0.0305/33、FSD50K 0.0555/38)。
+	 * どのモデルが載ったかもここで残す (CONFIG: 行の model= と同じ)
+	 */
+	in_quant_valid = (info.inputs[0].scale.size > 0) && (info.inputs[0].zeropoint.size > 0);
+	if(in_quant_valid) {
+		in_scale = info.inputs[0].scale.data[0];
+		in_zp    = (INT)info.inputs[0].zeropoint.data[0];
+	}
+	log_printf("  aed model: %s = %s\n", AED_MODEL_NAME, AED_MODEL_DESC);
+	log_printf("  aed classes: %d [%s]\n", AED_CLASSES, AED_CLASS_LIST_STR);
+	if(in_quant_valid) {
+		log_printf("  aed input quant: scale=%u e-9 zero_point=%d (from stai_network_get_info; the preprocessing uses these)\n",
+				(UW)(in_scale * 1e9f + 0.5f), in_zp);
+	} else {
+		log_printf("  aed input quant: [WARN] not in the model info (the preprocessing cannot quantize)\n");
+	}
+
 	/* D キャッシュの保守を 32B 単位で行うので、入力の先頭がラインの境界にあること */
 	if(!rt_step("input buffer 32B aligned", ((uintptr_t)in[0] & 0x1FU) == 0)) return E_IO;
 
@@ -258,6 +280,14 @@ EXPORT ER npu_rt_init(void)
 EXPORT BOOL npu_rt_ready(void)
 {
 	return ready;
+}
+
+EXPORT BOOL npu_rt_input_quant(float *scale, INT *zp)
+{
+	if(!in_quant_valid) return FALSE;
+	*scale = in_scale;
+	*zp    = in_zp;
+	return TRUE;
 }
 
 EXPORT B *npu_rt_input(void)

@@ -24,20 +24,30 @@
  * LED_GREEN (PO1) は usermain の task_1 が点滅させている (生存表示) ので触らない。
  */
 
-LOCAL const char *const class_name[AED_CLASSES] = {
-	"chainsaw", "clock_tick", "crackling_fire", "crying_baby", "dog",
-	"helicopter", "rain", "rooster", "sea_waves", "sneezing"
-};
+/* クラス名 (モデルの出力順。aed_model.h で選んだ model_<name>/aed_model_cfg.h) */
+LOCAL const char *const class_name[AED_CLASSES] = AED_CLASS_NAMES;
 
-/* 通知するクラス (notify.h)。番号と名前の対応は notify_init が確かめる */
+/* 通知するクラスとクールダウン (model_<name>/aed_model_cfg.h)。番号と名前の対応は notify_init が確かめる */
 LOCAL const INT		target_cls[]  = NOTIFY_CLASSES;
 LOCAL const char *const	target_name[] = NOTIFY_CLASS_NAMES;
+LOCAL const INT		target_cd_s[] = NOTIFY_COOLDOWN_S;
 
 #define N_TARGETS	((INT)(sizeof(target_cls) / sizeof(target_cls[0])))
 
 _Static_assert(sizeof(target_cls) / sizeof(target_cls[0])
 		== sizeof(target_name) / sizeof(target_name[0]),
 		"NOTIFY_CLASSES と NOTIFY_CLASS_NAMES の数が違う");
+_Static_assert(sizeof(target_cls) / sizeof(target_cls[0])
+		== sizeof(target_cd_s) / sizeof(target_cd_s[0]),
+		"NOTIFY_CLASSES と NOTIFY_COOLDOWN_S の数が違う");
+
+/* クールダウン: 窓数 (notify_init が秒から作る) と、そのクラスを最後に通知した窓 */
+LOCAL UW	cd_win[sizeof(target_cls) / sizeof(target_cls[0])];
+LOCAL UW	last_win[sizeof(target_cls) / sizeof(target_cls[0])];
+LOCAL BOOL	has_last[sizeof(target_cls) / sizeof(target_cls[0])];
+
+#define WIN_HOP_SAMPLES		(15360U)	/* 窓の間隔 (tap_ring.c の TAP_WIN_HOP と同じ。0.96 秒) */
+#define WIN_RATE		(16000U)
 
 /* floor にする順位 (昇順で 0 始まり)。60 窓の 10 パーセンタイル → 6 番目 = [5] */
 #define FLOOR_IDX	((NOTIFY_FLOOR_WINDOWS * NOTIFY_FLOOR_PERCENTILE / 100 > 0) \
@@ -47,7 +57,7 @@ _Static_assert(FLOOR_IDX >= 0 && FLOOR_IDX < NOTIFY_FLOOR_WINDOWS, "FLOOR_IDX �
 
 LOCAL INT	prev_cls = AED_CLS_UNKNOWN;	/* 前の窓の判定 (unknown の連続を抑えるため) */
 LOCAL BOOL	first = TRUE;			/* 最初の窓は unknown でも1回出す */
-LOCAL UW	n_emitted, n_held, n_offlist, n_gated_abs, n_gated_rel, lat_max_us, n_loose;
+LOCAL UW	n_emitted, n_held, n_offlist, n_gated_abs, n_gated_rel, n_cooldown, lat_max_us, n_loose;
 
 /* 絶対の門のしきい値 (int16 の振幅)。0 なら門なし。notify_init が dBFS から作る */
 LOCAL UW	gate_amp;
@@ -59,15 +69,21 @@ LOCAL UINT	hist_n, hist_pos;
 /* 直前の窓の結果の文字列 (notify_last_note)。書くのは notify_window だけ (推論タスク) */
 LOCAL char	note[48];
 
-/* 通知するクラスか */
-LOCAL BOOL is_target(INT cls)
+/* 通知するクラスなら NOTIFY_CLASSES の中の番号、でなければ -1 */
+LOCAL INT target_index(INT cls)
 {
 	INT	i;
 
 	for(i = 0; i < N_TARGETS; i++) {
-		if(target_cls[i] == cls) return TRUE;
+		if(target_cls[i] == cls) return i;
 	}
-	return FALSE;
+	return -1;
+}
+
+/* 通知するクラスか */
+LOCAL BOOL is_target(INT cls)
+{
+	return target_index(cls) >= 0;
 }
 
 /* ---------------------------------------------------------------- */
@@ -159,6 +175,25 @@ EXPORT ER notify_init(void)
 		}
 		log_printf("notify: rel gate rms >= floor + %d dB, floor = p%d of the last %d windows' rms (not applied until %d windows)\n",
 				NOTIFY_GATE_REL_DB, NOTIFY_FLOOR_PERCENTILE, NOTIFY_FLOOR_WINDOWS, NOTIFY_FLOOR_WINDOWS);
+	}
+
+	/*
+	 * クールダウンを秒から窓数に直す (窓の間隔 0.96 秒。切り上げ。30 秒 → 32 窓)。
+	 * 起動ログ: notify: cooldown Speech: 30 s = 32 windows ... (0 のクラスは出さず、全部 0 なら none)
+	 */
+	{
+		BOOL	any = FALSE;
+
+		for(i = 0; i < N_TARGETS; i++) {
+			cd_win[i] = (target_cd_s[i] > 0)
+					? ((UW)target_cd_s[i] * WIN_RATE + WIN_HOP_SAMPLES - 1U) / WIN_HOP_SAMPLES : 0U;
+			if(cd_win[i] > 0) {
+				any = TRUE;
+				log_printf("notify: cooldown %s: %d s = %u windows (same class not re-notified within this)\n",
+						target_name[i], target_cd_s[i], cd_win[i]);
+			}
+		}
+		if(!any) log_printf("notify: cooldown: none (every window can notify)\n");
 	}
 
 	id = tk_cre_alm(&calm_led);
@@ -306,6 +341,17 @@ LOCAL void make_note(NOTIFY_VERDICT v, float rms_db, float floor_db)
 	*d = '\0';
 }
 
+/* クールダウンで止めた窓: " (cooldown 12 win left)" */
+LOCAL void make_note_cooldown(UW left)
+{
+	char	*d = note;
+
+	d = put_str(d, " (cooldown ");
+	d = put_uint(d, left);
+	d = put_str(d, " win left)");
+	*d = '\0';
+}
+
 EXPORT const char *notify_last_note(void)
 {
 	return note;
@@ -324,6 +370,27 @@ EXPORT NOTIFY_VERDICT notify_window(UW win, INT cls, float p, UW rms, UW peak, U
 	/* 判定のあとに履歴へ (現在の窓は自分の floor に入らない)。門で止めた窓も鳴った窓も全部入れる */
 	notify_floor_update(rms_db);
 	make_note(v, rms_db, floor_db);
+
+	/*
+	 * クールダウン (門の外。状態を持つ): 同じクラスを通知してから cd_win 窓が経っていなければ通知しない
+	 * (JSON も LED も画面も出さない)。「通知している状態」は続くので prev_cls は cls のままにし、
+	 * 次に unknown になったときに 1 行出る。通知したときはその窓を覚える
+	 */
+	if(v == NOTIFY_PASS) {
+		INT	t = target_index(cls);
+
+		if(t >= 0 && cd_win[t] > 0 && has_last[t] && (UW)(win - last_win[t]) < cd_win[t]) {
+			n_cooldown++;
+			make_note_cooldown(cd_win[t] - (UW)(win - last_win[t]));
+			prev_cls = cls;
+			first    = FALSE;
+			return NOTIFY_COOLDOWN;
+		}
+		if(t >= 0) {
+			last_win[t] = win;
+			has_last[t] = TRUE;
+		}
+	}
 
 	/*
 	 * 門で止めた窓は unknown と同じ扱いにしてから下の状態の判定に入るので、静かな時間に出るのは
@@ -403,13 +470,14 @@ EXPORT NOTIFY_VERDICT notify_window(UW win, INT cls, float p, UW rms, UW peak, U
 }
 
 EXPORT void notify_stats(UW *emitted, UW *held, UW *offlist, UW *gated_abs, UW *gated_rel,
-			UW *lat_max, UW *lat_loose)
+			UW *cooldown, UW *lat_max, UW *lat_loose)
 {
 	*emitted   = n_emitted;
 	*held      = n_held;
 	*offlist   = n_offlist;
 	*gated_abs = n_gated_abs;
 	*gated_rel = n_gated_rel;
+	*cooldown  = n_cooldown;
 	*lat_max   = lat_max_us;
 	*lat_loose = n_loose;
 }

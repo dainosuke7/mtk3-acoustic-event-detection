@@ -108,10 +108,10 @@ FINAL_LINES = {
     "notify": (
         # 3.5 までは gated=、3.5-2 からは gated_abs= gated_rel= (無い方は None。gated は後で abs+rel にする)
         re.compile(
-            r"notify out=(\d+) held=(\d+) offlist=(\d+) (?:gated=(\d+)|gated_abs=(\d+) gated_rel=(\d+)) "
-            r"lat max=(\d+)us \((\d+) lower bounds\)"
+            r"notify out=(\d+) held=(\d+) offlist=(\d+) (?:gated=(\d+)|gated_abs=(\d+) gated_rel=(\d+))"
+            r"(?: cooldown=(\d+))? lat max=(\d+)us \((\d+) lower bounds\)"
         ),
-        ("out", "held", "offlist", "gated", "gated_abs", "gated_rel", "lat_max_us", "lat_loose"),
+        ("out", "held", "offlist", "gated", "gated_abs", "gated_rel", "cooldown", "lat_max_us", "lat_loose"),
     ),
     "log": (
         re.compile(r"log sent=(\d+) dropped=(\d+) lag max=(\d+)us"),
@@ -388,6 +388,9 @@ def run_summary(run: Run) -> list[str]:
         else:
             gated = f"gated_abs {nt['gated_abs']} / gated_rel {nt['gated_rel']}"
             what = "gated_abs=ピークの門で止めた窓、gated_rel=暗騒音からの差の門で止めた窓"
+            if nt.get("cooldown") is not None:
+                gated += f" / cooldown {nt['cooldown']}"
+                what += "、cooldown=同じクラスの再通知を抑えた窓"
         out.append(f"  {gated} / held {nt['held']} / offlist {nt['offlist']}  (FINAL。{what}、"
                    f"held=unknown が続いて出さなかった窓、offlist=通知対象外のクラスの窓)")
     return out

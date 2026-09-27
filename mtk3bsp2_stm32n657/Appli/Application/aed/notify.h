@@ -2,9 +2,10 @@
 #define AED_NOTIFY_H
 
 #include <tk/tkernel.h>
+#include "../npu/aed_model.h"	// AED_CLASSES と、モデルごとの AED_CLASS_NAMES / NOTIFY_CLASSES / NOTIFY_CLASS_NAMES / NOTIFY_COOLDOWN_S
 
 /*
- * 判定と通知 (Phase 1 タスク9。門は 3.5 / 3.5-2)
+ * 判定と通知 (Phase 1 タスク9。門は 3.5 / 3.5-2、クールダウンは 5-1)
  *
  * 推論の出力 (softmax 後の確率 x10) から1位のクラスを決め、門 (notify_gate) を通った窓だけ
  * UART に1行の JSON を出し、ボードの LED を点け、画面に出す。呼ぶのは推論タスク (infer_task.c) だけ。
@@ -15,7 +16,8 @@
  *   peak >= NOTIFY_GATE_PEAK_DBFS            でなければ NOTIFY_GATED_ABS
  *   rms_db >= floor + NOTIFY_GATE_REL_DB     でなければ NOTIFY_GATED_REL (floor は下の「相対の門」)
  *   → NOTIFY_PASS
- * 対象外のクラスを門より先に外すので、gated_abs + gated_rel + PASS = 対象クラスで閾値を超えた窓、
+ *   (通ったあと、同じクラスのクールダウン中なら NOTIFY_COOLDOWN。notify_gate の外で notify_window が見る)
+ * 対象外のクラスを門より先に外すので、gated_abs + gated_rel + cooldown + PASS = 対象クラスで閾値を超えた窓、
  * offlist = 対象外のクラスが 1位だった窓 (ピークによらない)。3.5 の gated (門が先) とは数え方が違う。
  * 同じ規則を PC で再生するのが scripts/notify_replay.py (ログの win 行と -> 行から)。
  *
@@ -31,7 +33,7 @@
  * 情報が増えず、UART と行の待ちを食うだけなので)。検出は毎窓出す。
  */
 
-#define AED_CLASSES		(10)
+/* AED_CLASSES (クラス数) はモデルごと (aed_model.h) */
 #define AED_CLS_UNKNOWN		(-1)
 
 /*
@@ -45,18 +47,16 @@
 #define AED_OOD_THR		(0.7f)
 
 /*
- * 通知するクラス番号 (モデルの出力順)。屋内で知らせたい音に絞る。
- * ここに無いクラスが1位になったときは LED も JSON も出さない。推論は毎窓続けるので、
- * 落とした数は notify_stats() の offlist に出る (誤報の内訳はこの数で見る)。
- * crackling_fire (2) は 1-Ex の対照試験 (1-Ex_対照試験結果.docx 4.2) で外した (2026-09-27):
- * 紙を丸める・手拍子・マグを置く生活音を crackling_fire と通知し (誤報 7 件中 6 件)、
- * 火の音のクリップは 2 本中 1 本しか拾えなかった (p=0.55)。dog 4 / crying_baby 3 / sneezing 9 の 3 クラス
+ * 通知するクラス (NOTIFY_CLASSES / NOTIFY_CLASS_NAMES) と、クラスごとの再通知クールダウン
+ * (NOTIFY_COOLDOWN_S、秒) はモデルごとに model_<name>/aed_model_cfg.h にある (aed_model.h が選ぶ)。
+ * ここに無いクラスが1位になったときは LED も JSON も出さず、数だけ notify_stats() の offlist に出る。
+ * 番号が出力順とずれていないかは notify_init() が NOTIFY_CLASS_NAMES と照合して報告する。
  *
- * NOTIFY_CLASS_NAMES は上の番号が指すべきクラス名 (同じ順)。モデルを差し替えて出力順が
- * 変わると番号がずれるので、notify_init() がクラス名と照合して食い違いを報告する
+ * クールダウン (5-1): あるクラスを通知してから NOTIFY_COOLDOWN_S 秒 (窓に直すと (S*16000+15359)/15360 窓、
+ * 30 秒なら 32 窓 = 30.7 秒) は、同じクラスが門を通っても通知しない (NOTIFY_COOLDOWN。JSON も LED も
+ * 画面も出さず、notify_stats() の cooldown に数える。「通知している状態」は続くので unknown の行も出ない)。
+ * FSD50K 版の Speech (話し声は続くので「続いている間は 1 回」) のため。0 なら毎窓通知する (ESC10 版は全部 0)
  */
-#define NOTIFY_CLASSES		{ 4, 3, 9 }
-#define NOTIFY_CLASS_NAMES	{ "dog", "crying_baby", "sneezing" }
 
 /*
  * 音量の門 (絶対)。窓のピーク (int16 の絶対値の最大) がこの dBFS 未満なら通知しない
@@ -108,6 +108,7 @@ typedef enum {
 	NOTIFY_GATED_REL,	/* rms_db が floor + NOTIFY_GATE_REL_DB 未満 */
 	NOTIFY_BELOW_THR,	/* 1位の確率が AED_OOD_THR 以下 (unknown) */
 	NOTIFY_OFFLIST,		/* 通知対象外のクラス */
+	NOTIFY_COOLDOWN,	/* 門は通ったが、同じクラスを通知してからクールダウンの窓数が経っていない (notify_window が付ける) */
 } NOTIFY_VERDICT;
 
 /*
@@ -157,6 +158,7 @@ EXPORT NOTIFY_VERDICT notify_window(UW win, INT cls, float p, UW rms, UW peak, U
  *   PASS       " (floor -42.6 Δ+17.0)"  (floor がまだ無ければ " (floor n/a)")
  *   GATED_ABS  " (gated abs)"
  *   GATED_REL  " (gated rel floor -42.6 Δ+6.2)"
+ *   COOLDOWN   " (cooldown 12 win left)"
  *   それ以外   ""
  * Δ = rms_db - floor
  */
@@ -166,9 +168,10 @@ EXPORT const char *notify_last_note(void);
  * *emitted 出した行数 / *held unknown が続いて出さなかった窓の数 /
  * *offlist 通知対象外のクラスで出さなかった窓の数 /
  * *gated_abs 絶対の門で止めた窓の数 / *gated_rel 相対の門で止めた窓の数 /
+ * *cooldown クールダウンで出さなかった窓の数 /
  * *lat_max_us 遅れの最大 / *lat_loose 下限値だった回数
  */
 EXPORT void notify_stats(UW *emitted, UW *held, UW *offlist, UW *gated_abs, UW *gated_rel,
-			UW *lat_max_us, UW *lat_loose);
+			UW *cooldown, UW *lat_max_us, UW *lat_loose);
 
 #endif	/* AED_NOTIFY_H */

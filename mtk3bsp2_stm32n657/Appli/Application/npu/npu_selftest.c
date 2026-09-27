@@ -4,7 +4,7 @@
 #include "main.h"		// CMSIS (SCB_CleanInvalidateDCache_by_Addr, SCB_InvalidateDCache_by_Addr)
 #include "npu_selftest.h"
 #include "npu_rt.h"
-#include "aed_test_input.h"	// 固定入力と期待値 (scripts/aed_ref.py の生成物。include はこのファイルだけ)
+#include AED_MODEL_TEST_INPUT_H	// 固定入力と期待値 (aed_model.h で選んだモデルの生成ヘッダ。include はこのファイルだけ)
 #include "ll_aton_NN_interface.h"	// EpochBlock_Flags_pure_sw
 
 /*
@@ -21,8 +21,8 @@
  * ESC-10 の実録音 30 本の入力と PC の1位 (scripts/aed_clips.py の生成物)。ESC-50 由来のデータ
  * なのでコミットしない (.gitignore)。無ければ実録音の判定だけを飛ばしてビルドは通す
  */
-#if AED_USE_TEST_CLIPS && __has_include("aed_test_clips.h")
-#include "aed_test_clips.h"
+#if AED_USE_TEST_CLIPS && __has_include(AED_MODEL_TEST_CLIPS_H)
+#include AED_MODEL_TEST_CLIPS_H
 #define NPU_HAVE_CLIPS		(1)
 #else
 #define NPU_HAVE_CLIPS		(0)
@@ -48,7 +48,7 @@
  * 乱数入力の目安 (参考値。判定には使わない): 1位がこのクラスで、期待値2通りのどちらかとの差
  * (各クラスの差の最大値) が上限以内。外れたら入力バッファの先頭を出してキャッシュを確かめる
  */
-#define ST_EXPECT_TOP		"helicopter"	/* 期待値2通りのどちらでも1位 (aed_test_input.h) */
+#define ST_EXPECT_TOP		AED_TEST_EXPECT_TOP	/* PC の1位 (生成ヘッダ aed_test_input.h) */
 #define ST_TOLERANCE		(0.05f)
 
 #define ST_REPEAT		(10)		/* 連続実行の回数 */
@@ -59,7 +59,8 @@ _Static_assert(NPU_SELFTEST_TOL_X1E4 == 500, "keep in sync with ST_TOLERANCE");
 #define LINE_BYTES		(32)		/* D キャッシュのライン */
 
 /*
- * softmax 直前の int8 ロジット (AED の network.c から読み取った番地。モデルを替えたら見直す)
+ * softmax 直前の int8 ロジット。番地はモデルごと (model_<name>/aed_model_cfg.h の AED_LOGIT_*。
+ * AED_LOGIT_HOOK が 0 のモデルでは logits_check を飛ばす)。以下は ESC10 版の network.c の説明
  *   epoch 29 (NPU): 最後の Gemm の結果を int8 x10 で 0x34350000 に書く
  *                   (出力はストリームエンジン0。network.c:10939 で開始時にこのラインを invalidate)
  *   epoch 30 (SW) : DequantizeLinear。0x34350000 の int8 を読み、float x10 を 0x34350440 に書く。
@@ -72,11 +73,13 @@ _Static_assert(NPU_SELFTEST_TOL_X1E4 == 500, "keep in sync with ST_TOLERANCE");
  * Softmax の入力 (0x34350440 の float) は推論の後も残っているので、推論後に読んで int8 に戻し、
  * 取った int8 と一致するかも確かめる。
  */
-#define LOGIT_Q_ADDR		(0x34350000U)
-#define LOGIT_F_ADDR		(0x34350440U)		/* 64B 境界 */
-#define LOGIT_SCALE_ADDR	(0x70180000U + 3282320U)
-#define LOGIT_ZP_ADDR		(0x70180000U + 3282784U)
-#define LOGIT_EB_FROM_END	(3)
+#if AED_LOGIT_HOOK
+#define LOGIT_Q_ADDR		AED_LOGIT_Q_ADDR
+#define LOGIT_F_ADDR		AED_LOGIT_F_ADDR	/* 64B 境界 */
+#define LOGIT_SCALE_ADDR	AED_LOGIT_SCALE_ADDR
+#define LOGIT_ZP_ADDR		AED_LOGIT_ZP_ADDR
+#define LOGIT_EB_FROM_END	AED_LOGIT_EB_FROM_END
+#endif
 #define LOGIT_TOL_LSB		(2)			/* 目安 (参考値): PC との差がこれ以内 */
 
 _Static_assert(AED_TEST_INPUT_LEN == NPU_RT_IN_BYTES, "test input size");
@@ -85,9 +88,11 @@ _Static_assert(AED_TEST_CLASSES == NPU_RT_OUT_CLASSES, "test output size");
 LOCAL float	ref_out[NPU_RT_OUT_CLASSES];	/* 最初の推論の出力。連続実行と予行の比較の基準 */
 LOCAL BOOL	ref_valid = FALSE;
 
+#if AED_LOGIT_HOOK
 LOCAL B		logit_q[NPU_RT_OUT_CLASSES];	/* epoch 30 の直前に取った int8 ロジット */
 LOCAL BOOL	logit_got;
 LOCAL UW	logit_flags;			/* 取ったときの epoch block の flags */
+#endif
 
 /* ---------------------------------------------------------------- */
 
@@ -195,6 +200,7 @@ LOCAL void show_input_heads(const B *src, const B *before)
 /* softmax 直前の int8 ロジット                                        */
 /* ---------------------------------------------------------------- */
 
+#if AED_LOGIT_HOOK
 /* npu_rt の epoch フック。推論の途中 (このタスクの中) で呼ばれるので表示はしない */
 LOCAL void logit_hook(INT idx, INT n, UW flags)
 {
@@ -312,6 +318,15 @@ LOCAL BOOL logits_check(void)
 			pass ? "within" : "NOT within", LOGIT_TOL_LSB);
 	return pass;
 }
+#else
+/* このモデルの番地がまだ無い (aed_model_cfg.h の AED_LOGIT_HOOK=0)。参考値なので飛ばすだけ */
+LOCAL BOOL logits_check(void)
+{
+	tm_printf((UB*)"npu logits: skipped (AED_LOGIT_HOOK=0 for model %s; fill AED_LOGIT_* in aed_model_cfg.h"
+			" after reading the generated network.c)\n", AED_MODEL_NAME);
+	return FALSE;
+}
+#endif	/* AED_LOGIT_HOOK */
 
 /* ---------------------------------------------------------------- */
 /* ESC-10 の実録音 (判定)                                              */
@@ -388,6 +403,18 @@ EXPORT BOOL npu_selftest(void)
 
 	tm_printf((UB*)"npu random-input test (reference only, not a pass/fail criterion): seed=%d\n",
 			AED_TEST_SEED);
+	{
+		/* 生成ヘッダがこのモデルのものか (入力の量子化がボードの値と同じか) */
+		float	b_scale;
+		INT	b_zp;
+
+		if(npu_rt_input_quant(&b_scale, &b_zp)) {
+			tm_printf((UB*)"  input quant: board scale=%u e-9 zp=%d, PC header scale=%u e-9 zp=%d -> %s\n",
+					(UW)(b_scale * 1e9f + 0.5f), b_zp, (UW)(AED_TEST_SCALE * 1e9f + 0.5f), AED_TEST_ZP,
+					(b_scale == AED_TEST_SCALE && b_zp == AED_TEST_ZP) ? "same"
+					: "DIFFERENT (is the header for another model?)");
+		}
+	}
 
 	/* 乱数入力で1回推論して PC と比べる (参考値) */
 	er = run_once(aed_test_input, out, &us, before, &in_diff);

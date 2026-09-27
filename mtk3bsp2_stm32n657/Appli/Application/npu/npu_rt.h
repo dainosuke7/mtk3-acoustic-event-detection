@@ -2,6 +2,7 @@
 #define NPU_NPU_RT_H
 
 #include <tk/tkernel.h>
+#include "aed_model.h"		// AED_MODEL で選んだモデル (AED_CLASSES など)
 
 /*
  * NPU 推論ランタイム (ST Edge AI の ll_aton + stai API) の起動と、推論1回分の実行枠
@@ -10,8 +11,10 @@
  * ランタイムとモデルは st/ 以下 (ST のファイルを無改変で同梱。st/LICENSE.md)。
  *   動作モード: LL_ATON_PLATFORM=STM32N6 / OSAL=BARE_METAL / RT_MODE=POLLING / SW_FALLBACK
  *   (定義は .cproject のプリプロセッサ定義)
- *   モデル: AED (yamnet_1024_64x96_tl_qdq_int8)。入力 int8 1x64x96x1、出力 float32 x10
- *   重み: 外部フラッシュ 0x70180000〜 (extflash_init でメモリマップ済みであること)
+ *   モデル: aed_model.h の AED_MODEL で選ぶ (model_esc10/ か model_fsd50k/)。入力 int8 1x64x96x1、
+ *           出力 float32 x AED_CLASSES (softmax 後)
+ *   重み: ESC10 版は外部フラッシュ 0x70180000〜 (extflash_init でメモリマップ済みであること)。
+ *         FSD50K 版は AXISRAM (model_fsd50k/README.md)
  *   作業領域: AXISRAM6 0x34350000〜 (144KB。入力・出力もこの中。番地は network.c に固定)
  *
  * NPU の割り込みは使わない。ll_aton は POLLING でも stai_runtime_init() の中で
@@ -19,7 +22,7 @@
  */
 
 #define NPU_RT_IN_BYTES		(6144)	/* int8 1x64x96x1 (メル64 x フレーム96、フレームが内側) */
-#define NPU_RT_OUT_CLASSES	(10)	/* float32 x10 (softmax 後) */
+#define NPU_RT_OUT_CLASSES	(AED_CLASSES)	/* float32 x クラス数 (softmax 後。モデルごと: aed_model.h) */
 
 /*
  * 推論1回の上限。ll_aton のポーリング待ち (LL_Streng_Wait) の中で DWT CYCCNT により判定する。
@@ -41,6 +44,13 @@ EXPORT ER npu_rt_init(void);
 
 /* npu_rt_init() が成功したか */
 EXPORT BOOL npu_rt_ready(void);
+
+/*
+ * モデル入力 (int8) の量子化 scale / zero_point (stai_network_get_info の inputs[0])。
+ * npu_rt_init が成功し、モデルが値を持っていれば TRUE。前処理 (preproc_set_quant) はこの値を使う
+ * (ESC10 版 0.0305305421 / 33、FSD50K 版 0.0555472746 / 38。定数では持たない)
+ */
+EXPORT BOOL npu_rt_input_quant(float *scale, INT *zp);
 
 /*
  * 入力・出力バッファ (AXISRAM6 内。ランタイムが決める番地)。準備できていなければ NULL。
