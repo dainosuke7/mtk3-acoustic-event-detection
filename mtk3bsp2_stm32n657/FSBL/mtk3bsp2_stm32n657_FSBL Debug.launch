@@ -56,7 +56,7 @@
     <intAttribute key="com.st.stm32cube.ide.mcu.rtosproxy.rtosProxyPort" value="60000"/>
     <booleanAttribute key="org.eclipse.cdt.debug.gdbjtag.core.doHalt" value="false"/>
     <booleanAttribute key="org.eclipse.cdt.debug.gdbjtag.core.doReset" value="false"/>
-    <stringAttribute key="org.eclipse.cdt.debug.gdbjtag.core.initCommands" value=""/>
+    <stringAttribute key="org.eclipse.cdt.debug.gdbjtag.core.initCommands" value="set {unsigned int}0x56028A54 = 0x00001000&#13;&#10;set {unsigned int}0x56028A4C = 0x0000040F&#13;&#10;set {unsigned int}0x52023100 = {unsigned int}0x52023100 &amp; ~0x00100000&#13;&#10;set {unsigned int}0x52023180 = {unsigned int}0x52023180 &amp; ~0x00100000&#13;&#10;set {unsigned int}0x52023200 = {unsigned int}0x52023200 &amp; ~0x00100000&#13;&#10;set {unsigned int}0x52023280 = {unsigned int}0x52023280 &amp; ~0x00100000"/>
     <stringAttribute key="org.eclipse.cdt.debug.gdbjtag.core.ipAddress" value="localhost"/>
     <stringAttribute key="org.eclipse.cdt.debug.gdbjtag.core.jtagDeviceId" value="com.st.stm32cube.ide.mcu.debug.stlink"/>
     <stringAttribute key="org.eclipse.cdt.debug.gdbjtag.core.pcRegister" value=""/>

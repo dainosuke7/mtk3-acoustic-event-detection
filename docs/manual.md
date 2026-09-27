@@ -83,6 +83,25 @@ CubeIDE でのインポート: File > Open Projects from File System で `mtk3bs
    `usermain()` に到達しません
 4. デバッガで一時停止していたら F8（Resume）で続行する
 
+FSD50K 版（既定）の重みは AXISRAM4（0x34270000）に置かれますが、この RAM はリセット直後は電源が切れていて
+（RAMCFG の SRAMSD = 1。入れるのはアプリの `npu_hw_init`）、そのままではデバッガの load が書けず
+"Load failed" になります。そこで同じ起動構成の Startup タブ「Initialization Commands」（load より前に GDB が
+実行する）に、`npu_hw_init` と同じ操作を入れてあります（`.launch` の `org.eclipse.cdt.debug.gdbjtag.core.initCommands`）:
+
+```
+set {unsigned int}0x56028A54 = 0x00001000                                   # RCC AHB2ENSR: RAMCFG のクロック
+set {unsigned int}0x56028A4C = 0x0000040F                                   # RCC MEMENSR: AXISRAM3〜6 と NPU キャッシュ RAM のクロック
+set {unsigned int}0x52023100 = {unsigned int}0x52023100 & ~0x00100000       # RAMCFG AXISRAM3 CR: SRAMSD を落とす
+set {unsigned int}0x52023180 = {unsigned int}0x52023180 & ~0x00100000       # RAMCFG AXISRAM4 CR
+set {unsigned int}0x52023200 = {unsigned int}0x52023200 & ~0x00100000       # RAMCFG AXISRAM5 CR
+set {unsigned int}0x52023280 = {unsigned int}0x52023280 & ~0x00100000       # RAMCFG AXISRAM6 CR
+```
+
+番地はセキュア側のエイリアス（アプリと同じ RCC_S 0x56028000、RAMCFG_S 0x52023000）。ENSR はセット専用
+レジスタなので他のビットには影響しません。効いていれば起動ログの `npu_hw_init` の行が
+`RCC MEMENR ... already enabled` と `RAMCFG AXISRAM4 CR ... (already powered)` になります。
+自分で起動構成を作るときはこの 6 行を Initialization Commands に貼ってください。
+
 ### 4.1 ESC-10 版のモデル重み（外部フラッシュ）
 
 同梱の既定は FSD50K 版で、重みはアプリの像に含まれる（AXISRAM4 に置かれる）ので追加の書き込みは要りません。
@@ -231,4 +250,5 @@ bash scripts/stedgeai/generate_esc10.sh <STM32N6-GettingStarted-Audio>     # ESC
 
 FSD50K 版の重みは `model_fsd50k/network_weights.c` の配列としてリンカスクリプトの AXISRAM4 領域（0x34270000）に置かれ、
 デバッガが elf と一緒に RAM へ載せます。この置き方はデバッガ起動専用です（外部フラッシュからの起動では
-連続した像しか複写されないため）。`.bin` は 0x34270000 までの隙間を埋めて約 2.7 MB になりますが使いません。
+連続した像しか複写されないため）。デバッガ起動時は AXISRAM4 を先に有効化する必要があり、起動構成の
+Initialization Commands に含めてあります（4 節）。`.bin` は 0x34270000 までの隙間を埋めて約 2.7 MB になりますが使いません。

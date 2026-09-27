@@ -18,6 +18,7 @@ Drivers/STM32N6xx_HAL_Driver/{Src,Inc}/	stm32n6xx_hal_ltdc.c/.h と _ltdc_ex.c/.
 Appli/.cproject（Debug 構成）	プリプロセッサ定義 LL_ATON_PLATFORM=LL_ATON_PLAT_STM32N6 / LL_ATON_OSAL=LL_ATON_OSAL_BARE_METAL / LL_ATON_RT_MODE=LL_ATON_RT_POLLING / LL_ATON_SW_FALLBACK / LL_ATON_DBG_BUFFER_INFO_EXCLUDED=1、インクルードパス ../Application/npu/st/{ll_aton,device,inc,model}、ライブラリ :NetworkRuntime1200_CM55_GCC.a（検索パス ../Application/npu/st/lib）	NPU 推論ランタイム（Application/npu/st/）のビルドに必要
 Appli/.cproject（Debug 構成）	sourceEntries の Application に npu/model_esc10|npu/model_fsd50k を excluding、インクルードパス ../Application/npu/st/model を削除（Debug/ の mk 系も同じに）	モデルの生成物は Application/npu/model_<name>/ に置き、aed_model_network.c / aed_model_stai.c が AED_MODEL で選んだ 1 組だけを #include する（2 つの network.c は同じシンボルを定義するので同時にコンパイルできない）
 Appli/STM32N657X0HXQ_LRUN.ld	MEMORY に AXISRAM4（0x34270000、448K）と出力セクション .npu_weights を追加（無ければ空）	FSD50K 版の重みを外部フラッシュでなく AXISRAM4 に置く（scripts/stedgeai/raw2c.py が作る model_fsd50k/network_weights.c。network.c が絶対番地で参照するメモリプールと同じ番地。Debug 起動でデバッガが elf と一緒に載せる。FSBL 起動では連続した像しか複写されないので Debug 専用）
+FSBL/mtk3bsp2_stm32n657_FSBL Debug.launch	Startup タブの Initialization Commands（org.eclipse.cdt.debug.gdbjtag.core.initCommands）に GDB の set を 6 行: RCC AHB2ENSR 0x56028A54 = 0x1000（RAMCFG クロック）、RCC MEMENSR 0x56028A4C = 0x40F（AXISRAM3〜6 と CACHEAXIRAM のクロック）、RAMCFG AXISRAM3〜6 の CR（0x52023100 / 180 / 200 / 280）の SRAMSD（bit 20）を読み出して落とす	FSD50K 版の重み（.npu_weights、AXISRAM4 0x34270000）をデバッガが load する前に RAM の電源を入れる。リセット直後は AXISRAM3〜6 が RAMCFG で shut down されていて（FSBL 後の MEMENR は 0x13f0 = AXISRAM1/2・AHBSRAM・FLEXRAM・BOOTROM だけ）、load が "Load failed" になる。npu_hw_init と同じ操作（セキュア側のエイリアス）。効いていれば npu_hw_init の行が already enabled / already powered になる
 変更は可能な限り USER CODE BEGIN/END 区画の中に書く（CubeMX 再生成で消えない）
 コマンド
 ビルド: bash scripts/build.sh
@@ -92,6 +93,7 @@ FAULT_TEST（fault.h）: 0=無効 / 1=BusFault / 2=ゼロ除算 / 3=未実装IRQ
 tm_printf はカーネル起動前（knl_start_mtkernel より前）に使えない。 起動前の初期化関数は Error_Handler() を呼ばず、結果を変数に記録してカーネル起動まで到達させる
 FSBL がペリフェラルを触った状態でアプリが起動する。 HAL_xxx_Init が HAL_ERROR を返したら __HAL_RCC_xxx_FORCE_RESET()/RELEASE_RESET() で戻してから初期化（MDF1 で発生。XSPI2 は最初からリセットしてから初期化している）
 カーネル起動後は SysTick がカーネル（knl_systim_inthdr）に渡り HAL_IncTick() が呼ばれない。 そのままだと HAL_GetTick() が止まり、HAL のタイムアウトが効かない（失敗時に永久待ち）・HAL_Delay() が戻らない。 usermain の周期ハンドラ（10ms ごとに HAL_IncTick() を10回）で補っている。カーネル起動後に HAL のタイムアウト付き API を使うのはこれを起動してから。 分解能は 10ms なので、タイムアウトが 10ms 未満の HAL 待ち（RCC の PLL/HSI 起動 1ms など）をカーネル起動後に呼ぶと誤タイムアウトし得る。PLL の設定はカーネル起動前（main.c）で行う
+リセット直後は AXISRAM3〜6 と NPU キャッシュ RAM の電源が切れている（RAMCFG SRAMSD=1、MEMENR のクロックも無し）。 アプリで使うぶんは npu_hw_init が入れるが、デバッガが elf を load する時点ではまだ切れているので、AXISRAM4 に置く FSD50K の重み（.npu_weights）は起動構成の Initialization Commands で先に電源を入れる（上の例外一覧）。入れずに Debug 起動すると Appli の load が "Load failed" で止まる。代替案（未実施）: 重みを AXISRAM1 側の固定番地に置く mpool で生成し直し、ROM 領域を 1023K に広げる（像が連続になり単体起動も可能になる）
 STM32N6 に DMA_CIRCULAR は無い。 循環DMAは HAL_DMAEx_List_* で組み、ノードは .noncacheable に置く
 キャッシュ: CPU が書いて DMA が読む前は SCB_CleanDCache_by_Addr、DMA が書いて CPU が読む前は SCB_InvalidateDCache_by_Addr
 割り込みを有効化したらハンドラを必ず用意する。 HAL_MDF_AcqStart_DMA は飽和/overrun 割り込みを自動で有効化する
