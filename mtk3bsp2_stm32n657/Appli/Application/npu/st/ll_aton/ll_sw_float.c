@@ -925,7 +925,7 @@ void ll_sw_forward_global_pool(Global_pool_sw_info *sw_info)
 
   AI_LAYER_OBJ_DECLARE(pool_layer, 1, POOL_TYPE, 0x0, NULL, pool, func, &pool_chain, NULL, NULL, ,
                        .pool_size =
-                           SHAPE_2D_INIT(sw_info->general.input.dim.tensor_w, sw_info->general.input.dim.tensor_w),
+                           SHAPE_2D_INIT(sw_info->general.input.dim.tensor_h, sw_info->general.input.dim.tensor_w),
                        .pool_stride = SHAPE_2D_INIT(1, 1), .pool_pad = SHAPE_INIT(0, 0, 0, 0), )
   pool_layer.forward(AI_LAYER_OBJ(&pool_layer));
 }

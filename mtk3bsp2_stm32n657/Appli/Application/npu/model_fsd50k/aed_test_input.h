@@ -1,27 +1,33 @@
-/* 自動生成: scripts/aed_ref.py。手で編集しない (作り直すときはスクリプトを実行する) */
+/* 自動生成: scripts/aed_clips.py --model fsd50k。手で編集しない (作り直すときはスクリプトを実行する) */
 #ifndef NPU_AED_TEST_INPUT_H
 #define NPU_AED_TEST_INPUT_H
 
 #include <stdint.h>
 
 /*
- * AED モデルの比較用の固定入力と、ONNX Runtime で求めた期待値 (Phase 1 タスク6 で使う)
+ * AED モデルの比較用の固定入力と、PC で求めた期待値 (npu_selftest.c が使う)
  *
- *   モデル: yamnet_1024_64x96_tl_qdq_int8.onnx
- *           sha256 eb7c333b7a1016e885d359dde506a0c361007bf02a0c64cdd5caf263b9e7e6bb
+ *   モデル: yamnet_e256_64x96_tl_int8.tflite (ST model zoo audio_event_detection/yamnet/ST_pretrainedmodel_public_dataset/fsd50k/yamnet_e256_64x96_tl/without_unknown_class、Apache-2.0)
+ *           sha256 33649e4ff8e5c26c0733e3b85e5dc4519ba0607590cd1d716c8e1fae91b781e1
  *   入力:   int8 1x64x96x1。一様乱数 [-128, 127]、numpy default_rng(seed=2026)
  *           並びは [メル 0..63][フレーム 0..95] (フレームが内側)。NPU の入力バッファ
  *           (npu_rt_input()) にこのままコピーし、D キャッシュを clean+invalidate してから推論する
- *   量子化: scale=0.0305305421, zero_point=33 (NPU 版と ONNX で一致を確認済み)。
- *           ONNX には (q - zero_point) * scale の float32 を渡した
- *   期待値: ONNX Runtime 1.30.0 (CPU)。softmax 後の float32
+ *   量子化: scale=0.0555472746, zero_point=38 (モデルの入力の値。ボードは stai_network_get_info の値と照合する)
+ *   期待値: 第1の実装 = TensorFlow Lite 2.21.0 最適化カーネル (BUILTIN、デリゲートなし)
+ *           第2の実装 = TensorFlow Lite 2.21.0 参照カーネル (BUILTIN_REF)
+ *           (aed_test_expect_ort / _ort_float は softmax 後の float32、aed_test_logits_* は softmax 直前の int8)
  *
  * static な配列なので、このヘッダを include するのは1つの .c だけにする。
  */
 
 #define AED_TEST_SEED		(2026)
 #define AED_TEST_INPUT_LEN	(6144)
-#define AED_TEST_CLASSES	(10)
+#define AED_TEST_CLASSES	(5)
+#define AED_TEST_SCALE		(0.0555472746f)
+#define AED_TEST_ZP		(38)
+
+/* 乱数入力での PC の1位 (2つの実装で同じ) */
+#define AED_TEST_EXPECT_TOP	"Crying_and_sobbing"
 
 static const int8_t aed_test_input[AED_TEST_INPUT_LEN] __attribute__((aligned(32))) = {
 	  42,  121, -110,   90, -124,   44,   78,  -83,   63,  -52,   67, -122,  -25,  -39,   81,   35,
@@ -410,36 +416,36 @@ static const int8_t aed_test_input[AED_TEST_INPUT_LEN] __attribute__((aligned(32
 	 106,   83,  101, -110,    7,    2,   33,  -67,  -37,  109,  -37,  -11,  -35,  -57,  -55,  112,
 };
 
-/* ONNX Runtime の既定 (QDQ を int8 演算に融合)。NPU の整数演算に近いのはこちらの見込み */
+/* 第1の実装: TensorFlow Lite 2.21.0 最適化カーネル (BUILTIN、デリゲートなし) */
 static const float aed_test_expect_ort[AED_TEST_CLASSES] = {
-	0.00444209995f, 0.264826685f, 0.00159861927f, 0.000334908284f, 0.000120526565f, 0.692941606f, 0.0156987645f, 0.0109449774f, 0.00810350198f, 0.000988274347f
+	0.99609375f, 0.0f, 0.0f, 0.0f, 0.0f
 };
 
-/* ONNX Runtime のグラフ最適化なし (float で量子化を模擬) */
+/* 第2の実装: TensorFlow Lite 2.21.0 参照カーネル (BUILTIN_REF) */
 static const float aed_test_expect_ort_float[AED_TEST_CLASSES] = {
-	0.00227976893f, 0.315342277f, 0.000871276308f, 0.000143516896f, 6.18564372e-05f, 0.648758948f, 0.0186933018f, 0.00758681446f, 0.00561716734f, 0.000645080348f
+	0.99609375f, 0.0f, 0.0f, 0.0f, 0.0f
 };
 
-/* クラス名 (出力の並び。ST の ai_model_config.h.aed と同じ) */
+/* クラス名 (出力の並び。モデルの config の class_names を昇順に並べたもの) */
 static const char *const aed_test_class_names[AED_TEST_CLASSES] = {
-	"chainsaw", "clock_tick", "crackling_fire", "crying_baby", "dog", "helicopter", "rain", "rooster", "sea_waves", "sneezing"
+	"Crying_and_sobbing", "Glass", "Gunshot_and_gunfire", "Knock", "Speech"
 };
 
 /*
- * softmax 直前の int8 ロジット (DequantizeLinear の入力)。
+ * softmax 直前の int8 ロジット。tflite の SOFTMAX の入力 (int8)。第1は最適化カーネル、第2は参照カーネルの値
  * float のロジット = (q - AED_TEST_LOGIT_ZP) * AED_TEST_LOGIT_SCALE が Softmax に入る
  */
-#define AED_TEST_LOGIT_SCALE	(0.0601168834f)
-#define AED_TEST_LOGIT_ZP	(51)
+#define AED_TEST_LOGIT_SCALE	(0.137729645f)
+#define AED_TEST_LOGIT_ZP	(74)
 
-/* ONNX Runtime の既定 (QDQ を int8 演算に融合) */
+/* 第1の実装 */
 static const int8_t aed_test_logits_ort[AED_TEST_CLASSES] = {
-	 -47,   21,  -64,  -90, -107,   37,  -26,  -32,  -37,  -72
+	  76,  -60, -128,  -47,  -22
 };
 
-/* ONNX Runtime のグラフ最適化なし (float で計算し、QuantizeLinear で int8 に丸めた値) */
+/* 第2の実装 */
 static const int8_t aed_test_logits_ort_noopt[AED_TEST_CLASSES] = {
-	 -59,   23,  -75, -105, -119,   35,  -24,  -39,  -44,  -80
+	  75,  -60, -128,  -47,  -21
 };
 
 #endif	/* NPU_AED_TEST_INPUT_H */

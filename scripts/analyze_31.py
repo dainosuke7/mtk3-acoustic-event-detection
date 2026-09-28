@@ -72,7 +72,7 @@ RE_RATE = re.compile(
     r"(?: logdrop=(\d+))? loglag=(\d+)us"
 )
 RE_JSON = re.compile(r'^\{"win":\d+,"cls":"[^"]*","p":[0-9.]+,"lat_ms":\d+,"under":\d+,"over":\d+,"late":\d+\}$')
-RE_LCD = re.compile(r"^lcd: win (\d+) -> (\S+) p=([0-9.]+) \((\d+) us after notify\)")
+RE_LCD = re.compile(r"^lcd: win (\d+) -> (\S+) p=([0-9.]+) \((\d+) us after notify\)(?: paint=(\d+)us)?")
 
 # FINAL の本文。名前 → (正規表現, 取り出す項目名の並び)。slow は条件 D のビルドだけ
 FINAL_LINES = {
@@ -108,10 +108,10 @@ FINAL_LINES = {
     "notify": (
         # 3.5 までは gated=、3.5-2 からは gated_abs= gated_rel= (無い方は None。gated は後で abs+rel にする)
         re.compile(
-            r"notify out=(\d+) held=(\d+) offlist=(\d+) (?:gated=(\d+)|gated_abs=(\d+) gated_rel=(\d+)) "
-            r"lat max=(\d+)us \((\d+) lower bounds\)"
+            r"notify out=(\d+) held=(\d+) offlist=(\d+) (?:gated=(\d+)|gated_abs=(\d+) gated_rel=(\d+))"
+            r"(?: cooldown=(\d+))? lat max=(\d+)us \((\d+) lower bounds\)"
         ),
-        ("out", "held", "offlist", "gated", "gated_abs", "gated_rel", "lat_max_us", "lat_loose"),
+        ("out", "held", "offlist", "gated", "gated_abs", "gated_rel", "cooldown", "lat_max_us", "lat_loose"),
     ),
     "log": (
         re.compile(r"log sent=(\d+) dropped=(\d+) lag max=(\d+)us"),
@@ -147,6 +147,7 @@ class Run:
     lat_ms: list[int] = field(default_factory=list)      # READY 以降の JSON の lat_ms
     cls_lines: Counter = field(default_factory=Counter)  # JSON 行のクラス別の数 (走行全体。FINAL の notify out と同じ範囲)
     lcd_us: list[int] = field(default_factory=list)      # READY 以降の lcd 行の「通知から描画まで」
+    paint_us: list[int] = field(default_factory=list)    # READY 以降の lcd 行の全面描画 1 回 (paint=。5-4 以降のログだけ)
     n_lost_lines: int = 0       # "tap: window lost" が出力できた回数 (D では大半が捨てられる)
     n_stopped: int = 0          # PASSTHROUGH STOPPED の見出しの数
 
@@ -280,6 +281,8 @@ def parse_log(path: Path) -> list[Run]:
             m = RE_LCD.match(text)
             if m:
                 run.lcd_us.append(int(m.group(4)))
+                if m.group(5):
+                    run.paint_us.append(int(m.group(5)))
 
     for r in runs:
         r.n_boots = len(runs)
@@ -388,6 +391,9 @@ def run_summary(run: Run) -> list[str]:
         else:
             gated = f"gated_abs {nt['gated_abs']} / gated_rel {nt['gated_rel']}"
             what = "gated_abs=ピークの門で止めた窓、gated_rel=暗騒音からの差の門で止めた窓"
+            if nt.get("cooldown") is not None:
+                gated += f" / cooldown {nt['cooldown']}"
+                what += "、cooldown=同じクラスの再通知を抑えた窓"
         out.append(f"  {gated} / held {nt['held']} / offlist {nt['offlist']}  (FINAL。{what}、"
                    f"held=unknown が続いて出さなかった窓、offlist=通知対象外のクラスの窓)")
     return out
@@ -446,6 +452,9 @@ def rows_for(run: Run) -> dict[str, str]:
         ),
         "画面 通知から描画まで median / max (行数、READY 以降)": (
             f"{med(run.lcd_us)}us / {max(run.lcd_us)}us ({len(run.lcd_us)})" if run.lcd_us else "- (0)"
+        ),
+        "画面 全面描画 1 回 median / max (行数、READY 以降)": (
+            f"{med(run.paint_us)}us / {max(run.paint_us)}us ({len(run.paint_us)})" if run.paint_us else "- (0)"
         ),
         "in Hz 中央値 / out Hz 中央値 (行数、READY 以降)": f"{med(ins)} / {med(outs)} ({len(run.rates)})",
         "PASSTHROUGH STOPPED / tap: window lost の行数 (ログ全体)": f"{run.n_stopped} / {run.n_lost_lines}",

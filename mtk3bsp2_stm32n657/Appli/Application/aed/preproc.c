@@ -43,8 +43,14 @@
 /* メルフィルタの係数表の上限。ST・PC と同じなら AED_PREPROC_MEL_COEFS (461) 個入る */
 #define MEL_LUT_MAX		(512)
 
-/* 量子化。ST の output_Q_inv_scale / output_Q_offset (ai_dpu.c:170 の 1 / scale) にあたる */
-#define INV_SCALE		(1.0f / AED_PREPROC_SCALE)
+/*
+ * 量子化 (preproc_set_quant が設定。モデルの入力の scale / zero_point)。
+ * ST の output_Q_inv_scale / output_Q_offset (ai_dpu.c:170 の 1 / scale) にあたる
+ */
+LOCAL float	inv_scale;
+LOCAL float	q_scale;
+LOCAL INT	q_zp;
+LOCAL BOOL	quant_set = FALSE;
 
 /* ---------------------------------------------------------------- */
 /* 表 (preproc_init が作る)                                           */
@@ -201,7 +207,24 @@ EXPORT ER preproc_init(void)
 
 EXPORT BOOL preproc_ready(void)
 {
-	return ready;
+	return ready && quant_set;
+}
+
+EXPORT void preproc_set_quant(float scale, INT zp)
+{
+	if(scale <= 0.0f) return;
+	q_scale   = scale;
+	q_zp      = zp;
+	inv_scale = 1.0f / scale;
+	quant_set = TRUE;
+}
+
+EXPORT BOOL preproc_quant(float *scale, INT *zp)
+{
+	if(!quant_set) return FALSE;
+	*scale = q_scale;
+	*zp    = q_zp;
+	return TRUE;
 }
 
 EXPORT UINT preproc_mel_coefs(void)
@@ -296,7 +319,7 @@ LOCAL void column(const H *pcm, B *out, INT stride)
 		v = logf(acc);
 
 		/* int8 = SSAT(roundf(v * (1/scale) + zero_point), 8) */
-		q = (INT)roundf(v * INV_SCALE + (float)AED_PREPROC_ZP);
+		q = (INT)roundf(v * inv_scale + (float)q_zp);
 		if(q > 127) q = 127;
 		else if(q < -128) q = -128;
 		out[j * stride] = (B)q;
@@ -308,7 +331,7 @@ EXPORT UW preproc_run(const H *pcm, B *out)
 	UW	t0;
 	INT	i;
 
-	if(!ready) return 0;
+	if(!ready || !quant_set) return 0;
 
 	t0 = NOW();
 	for(i = 0; i < AED_PREPROC_COLS; i++) {

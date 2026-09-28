@@ -17,9 +17,10 @@ floor は直近 60 窓の rms_db (20*log10(rms/32768)) の 10 パーセンタイ
     uv run scripts/notify_replay.py logs/uart_x.log --all                     # READY 前の窓も含める
     uv run scripts/notify_replay.py logs/uart_x.log -v                        # 候補の窓 (p > 閾値) を全部出す
     uv run scripts/notify_replay.py logs/uart_x.log --rel-db 8 --windows 30   # 規則の値を変えて試す
+    uv run scripts/notify_replay.py logs/uart_x.log --model fsd50k            # FSD50K 版 (Knock/Glass/Crying/Speech、Speech は 30 秒のクールダウン)
 
-出すもの: 窓の数、通知 (PASS) の数とクラス別、止めた理由ごとの数 (gated_abs / gated_rel / below_thr /
-offlist)、PASS の窓の一覧 (時刻・窓番号・クラス・p・rms_db・floor・Δ)、ボードが win 行に付けた印
+出すもの: 窓の数、通知 (PASS) の数とクラス別、止めた理由ごとの数 (gated_abs / gated_rel / cooldown /
+below_thr / offlist)、PASS の窓の一覧 (時刻・窓番号・クラス・p・rms_db・floor・Δ)、ボードが win 行に付けた印
 ("(gated abs)" / "(gated rel ...)" / "(floor ...)"。3.5 の "(gated)" は abs) との照合。
 1 つのログに起動が 2 回以上あれば (READY が複数)、起動ごとに履歴を作り直して別に出す。
 """
@@ -42,11 +43,26 @@ DEF_PERCENTILE = 10
 DEF_REL_DB = 10
 DEF_CLASSES = "dog,crying_baby,sneezing"
 
+# モデルごとの通知対象と、クラスごとの再通知クールダウン [秒] (notify.h の NOTIFY_CLASSES / NOTIFY_COOLDOWN_S)。
+# クールダウン: そのクラスを通知してから NOTIFY_COOLDOWN_S 秒 (窓に直すと (S*16000+15359)//15360 窓) は
+# 同じクラスを通知しない (verdict cooldown)。Speech の「続いている間は 1 回」のため
+MODELS = {
+    "esc10":  {"classes": "dog,crying_baby,sneezing", "cooldown": {}},
+    "fsd50k": {"classes": "Knock,Glass,Crying_and_sobbing,Speech", "cooldown": {"Speech": 30}},
+}
+WIN_HOP = 15360          # 窓の間隔 [サンプル] (tap_ring.c)
+WIN_RATE = 16000
+
 RE_TS = re.compile(r"^(\d\d:\d\d:\d\d\.\d\d\d) ")
 RE_WIN = re.compile(r"^win +(\d+) pos= *\d+ +(-?\d+)dBFS \[[#.]*\] rms= *(\d+) peak= *(\d+) ")
 RE_ARROW = re.compile(r"^  -> (\S+) +p=([0-9.]+)(.*?)  preproc=")
 
-PASS, GATED_ABS, GATED_REL, BELOW_THR, OFFLIST = "PASS", "gated_abs", "gated_rel", "below_thr", "offlist"
+PASS, GATED_ABS, GATED_REL, BELOW_THR, OFFLIST, COOLDOWN = "PASS", "gated_abs", "gated_rel", "below_thr", "offlist", "cooldown"
+
+
+def cooldown_windows(seconds: float) -> int:
+    """notify.c と同じ: 秒 → 窓 (切り上げ)"""
+    return (int(seconds) * WIN_RATE + WIN_HOP - 1) // WIN_HOP
 
 
 @dataclass
@@ -57,6 +73,7 @@ class Rule:
     percentile: int = DEF_PERCENTILE
     rel_db: float = DEF_REL_DB
     classes: frozenset = frozenset(DEF_CLASSES.split(","))
+    cooldown_s: dict = field(default_factory=dict)      # クラス名 → 秒 (0 か無ければクールダウン無し)
 
     @property
     def gate_amp(self) -> int:
@@ -72,9 +89,11 @@ class Rule:
         return k - 1 if k > 0 else 0
 
     def describe(self) -> str:
+        cd = ", ".join(f"{c} {sec}s ({cooldown_windows(sec)} win)" for c, sec in sorted(self.cooldown_s.items()) if sec > 0)
         return (f"p>{self.thr:.2f} AND peak>={self.gate_amp} ({self.peak_dbfs} dBFS) AND "
                 f"rms_db >= floor+{self.rel_db:g} dB (floor = p{self.percentile} of last {self.windows} windows, "
-                f"off until {self.windows}) AND cls in {','.join(sorted(self.classes))}")
+                f"off until {self.windows}) AND cls in {','.join(sorted(self.classes))}"
+                + (f"; cooldown {cd}" if cd else ""))
 
 
 def rms_db_of(rms: int) -> float:
@@ -99,6 +118,8 @@ def gate(rule: Rule, rms_db: float, peak: int, p: float, cls: str, floor: float 
 def board_verdict(note: str) -> str | None:
     """ボードが -> 行に付けた印 → 判定。無印は None (unknown / 対象外 / 3.5 以前の PASS)"""
     n = note.strip()
+    if n.startswith("(cooldown"):
+        return COOLDOWN
     if n.startswith("(gated rel"):
         return GATED_REL
     if n.startswith("(gated abs") or n == "(gated)":
@@ -168,17 +189,25 @@ def replay(run: Run, rule: Rule, verbose: bool) -> list[str]:
     by_cls: Counter = Counter()
     passed: list[str] = []
     cand: list[str] = []
+    last_win: dict[str, int] = {}          # クラス → 最後に通知した窓 (クールダウン)
     n_cmp = n_ok = n_ng = 0
     ng: list[str] = []
     # ボードの印の形式: 3.5-2 以降 (floor / gated abs / gated rel) は全窓を比べる。3.5 ((gated) だけ) は
     # 対象クラスの候補で abs の門だけ比べる (ボードの無印 = PASS か、当時無かった rel の門)。印が無ければ比べない
-    new_marks = any(board_verdict(w.note) in (PASS, GATED_REL) or w.note.strip().startswith("(gated abs")
+    new_marks = any(board_verdict(w.note) in (PASS, GATED_REL, COOLDOWN) or w.note.strip().startswith("(gated abs")
                     for w in run.windows)
     old_marks = not new_marks and any(w.note.strip() == "(gated)" for w in run.windows)
     for w in run.windows:
         rms_db = rms_db_of(w.rms)
         floor = sorted(hist)[rule.floor_idx] if len(hist) >= rule.windows else None
         v = gate(rule, rms_db, w.peak, w.p, w.cls, floor)
+        if v == PASS:
+            # クールダウン (notify_window の中。門の後): 同じクラスを通知してから所定の窓数は出さない
+            cd = cooldown_windows(rule.cooldown_s.get(w.cls, 0))
+            if cd > 0 and w.cls in last_win and (w.win - last_win[w.cls]) < cd:
+                v = COOLDOWN
+            else:
+                last_win[w.cls] = w.win
         hist.append(rms_db)
         if len(hist) > rule.windows:
             del hist[0]
@@ -200,7 +229,7 @@ def replay(run: Run, rule: Rule, verbose: bool) -> list[str]:
             else:
                 n_ng += 1
                 ng.append(row + f"  board:{w.note.strip() or '(none)'}")
-        elif old_marks and v in (PASS, GATED_ABS, GATED_REL):
+        elif old_marks and v in (PASS, GATED_ABS, GATED_REL, COOLDOWN):
             n_cmp += 1
             if (b == GATED_ABS) == (v == GATED_ABS):
                 n_ok += 1
@@ -214,7 +243,8 @@ def replay(run: Run, rule: Rule, verbose: bool) -> list[str]:
     out.append(f"  rule: {rule.describe()}")
     out.append(f"  通知 (PASS): {counts[PASS]}"
                + (f"  内訳 " + " / ".join(f"{c} {n}" for c, n in by_cls.most_common()) if by_cls else ""))
-    out.append(f"  gated_abs {counts[GATED_ABS]} / gated_rel {counts[GATED_REL]} / below_thr {counts[BELOW_THR]} / offlist {counts[OFFLIST]}")
+    out.append(f"  gated_abs {counts[GATED_ABS]} / gated_rel {counts[GATED_REL]} / cooldown {counts[COOLDOWN]}"
+               f" / below_thr {counts[BELOW_THR]} / offlist {counts[OFFLIST]}")
     if n_cmp:
         out.append(f"  ボードの印との照合: 一致 {n_ok} / 不一致 {n_ng}"
                    + ("" if new_marks else " (印が (gated) だけの 3.5 のログなので、対象クラスの候補で abs の門だけ比べた)"))
@@ -240,7 +270,10 @@ def main() -> int:
     ap.add_argument("--windows", type=int, default=DEF_WINDOWS, help=f"NOTIFY_FLOOR_WINDOWS (既定 {DEF_WINDOWS})")
     ap.add_argument("--percentile", type=int, default=DEF_PERCENTILE, help=f"NOTIFY_FLOOR_PERCENTILE (既定 {DEF_PERCENTILE})")
     ap.add_argument("--rel-db", type=float, default=DEF_REL_DB, help=f"NOTIFY_GATE_REL_DB (既定 {DEF_REL_DB})")
-    ap.add_argument("--classes", default=DEF_CLASSES, help=f"通知するクラス (既定 {DEF_CLASSES})")
+    ap.add_argument("--model", choices=sorted(MODELS), default="esc10",
+                    help="通知対象とクールダウンの組 (既定 esc10。--classes / --cooldown で個別に上書き)")
+    ap.add_argument("--classes", default=None, help="通知するクラス (既定はモデルの組)")
+    ap.add_argument("--cooldown", default=None, help="クラスごとの再通知クールダウン [秒]。例 Speech=30,Knock=0")
     args = ap.parse_args()
 
     for stream in (sys.stdout, sys.stderr):
@@ -252,8 +285,15 @@ def main() -> int:
         except Exception:
             pass
 
+    model = MODELS[args.model]
+    classes = args.classes if args.classes is not None else model["classes"]
+    cooldown = dict(model["cooldown"])
+    if args.cooldown:
+        for kv in args.cooldown.split(","):
+            k, v = kv.split("=")
+            cooldown[k.strip()] = float(v)
     rule = Rule(args.thr, args.peak_dbfs, args.windows, args.percentile, args.rel_db,
-                frozenset(c for c in args.classes.split(",") if c))
+                frozenset(c for c in classes.split(",") if c), cooldown)
     rc = 0
     for path in args.logs:
         if not path.is_file():

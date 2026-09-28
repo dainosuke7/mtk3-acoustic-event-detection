@@ -18,25 +18,25 @@
   */
 
 /*
- * GIT_SHA         "7cc654104236b2ac726c804c5d7f201e2afd1c79"
+ * GIT_SHA         "6770925d2803cfc24528c45bb3ba8b791b2a83e4"
  * GIT_BRANCH      "HEAD"
- * GIT_DESCRIPTION "STAI-3.0.0-254-g7cc654104"
+ * GIT_DESCRIPTION "atonn-v1.1.3-275-g6770925d2-dirty"
  *
  * Command Line options:
  * --load-mdesc-file = "C:/ST/STEdgeAI/4.0/Utilities/configs/stm32n6"
  * --load-cdesc-file = "C:/ST/STEdgeAI/4.0/Utilities/configs/cortex-m55"
- * --load-mpool-file = "C:/ST/CurrentDev/N6/STM32N6_GettingStarted_Audio/Projects/X-CUBE-AI/models/stm32n6"
+ * --load-mpool-file = "C:/Users/daich/work/tron/scripts/stedgeai/stm32n6_esc10"
  * --cache-maintenance = true
  * --native-float = true
- * --json-quant-file = "C:/ST/CurrentDev/N6/STM32N6_GettingStarted_Audio/Projects/X-CUBE-AI/models/st_ai_output/yamnet_1024_64x96_tl_qdq_int8_OE_3_3_1_Q.json"
+ * --json-quant-file = "C:/Users/daich/work/tron/scripts/stedgeai/st_ai_output_esc10/yamnet_1024_64x96_tl_qdq_int8_OE_3_3_1_Q.json"
  * --optimization = 3
  * --Os = true
  * --Omax-ca-pipe = 4
  * --Ocache-opt = true
  * --csv-file = "network"
  * --output-info-file = "c_info"
- * --onnx-input = "C:/ST/CurrentDev/N6/STM32N6_GettingStarted_Audio/Projects/X-CUBE-AI/models/st_ai_output/yamnet_1024_64x96_tl_qdq_int8_OE_3_3_1.onnx"
- * --out-dir-prefix = "C:/ST/CurrentDev/N6/STM32N6_GettingStarted_Audio/Projects/X-CUBE-AI/models/st_ai_ws/neural_art__network/"
+ * --onnx-input = "C:/Users/daich/work/tron/scripts/stedgeai/st_ai_output_esc10/yamnet_1024_64x96_tl_qdq_int8_OE_3_3_1.onnx"
+ * --out-dir-prefix = "C:/Users/daich/work/tron/scripts/stedgeai/st_ai_ws_esc10/neural_art__network/"
  * --network-name = "network"
  * --all-buffers-info = true
  * --generate-stai = true
@@ -49,7 +49,7 @@
 #include "ll_sw.h"
 #include "ll_aton_cipher.h"
 
-#if LL_ATON_VERSION_MAJOR != 1 || LL_ATON_VERSION_MINOR != 1 || LL_ATON_VERSION_MICRO != 3 || LL_ATON_VERSION_DEV != 262
+#if LL_ATON_VERSION_MAJOR != 1 || LL_ATON_VERSION_MINOR != 1 || LL_ATON_VERSION_MICRO != 3 || LL_ATON_VERSION_DEV != 275
 #  error "Possible mismatch in ll_aton library used"
 #endif
 

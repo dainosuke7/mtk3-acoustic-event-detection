@@ -130,7 +130,6 @@ RM := rm -rf
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk
 -include Application/trace/subdir.mk
--include Application/npu/st/model/subdir.mk
 -include Application/npu/st/ll_aton/subdir.mk
 -include Application/npu/st/device/subdir.mk
 -include Application/npu/subdir.mk

@@ -1,0 +1,37 @@
+{
+	"params": {
+		"param": [
+			{ "paramname": "max_onchip_sram_size", "value": "1024", "magnitude": "KBYTES" }
+		]
+	},
+	"memory": {
+		"cacheinfo": [
+			{
+				"nlines": 512,
+				"linesize": 64,
+				"associativity": 8,
+				"bypass_enable": 1,
+				"prop": { "rights": "ACC_WRITE",  "throughput": "MID",   "latency": "MID", "byteWidth": 8, "freqRatio": 2.50, "read_power": 13.584, "write_power": 12.645 }
+			}
+		],
+		"mem_file_prefix": "atonbuf",
+		"mempools": [
+			{
+				"fname": "AXISRAM4",
+				"name":  "npuRAM4",
+				"fformat": "FORMAT_RAW",
+				"prop":	  { "rights": "ACC_WRITE", "throughput": "HIGH", "latency": "LOW", "byteWidth": 8, "freqRatio": 1.25, "read_power": 19.006, "write_power": 15.790, "constants_preferred": "true" },
+				"offset": { "value": "0x34270000", "magnitude":  "BYTES" },
+				"size":   { "value": "448",        "magnitude": "KBYTES" }
+			},
+			{
+				"fname": "AXISRAM6",
+				"name":  "npuRAM6",
+				"fformat": "FORMAT_RAW",
+				"prop":	  { "rights": "ACC_WRITE", "throughput": "HIGH", "latency": "LOW", "byteWidth": 8, "freqRatio": 1.25, "read_power": 19.006, "write_power": 15.790 },
+				"offset": { "value": "0x34350000", "magnitude":  "BYTES" },
+				"size":   { "value": "448",        "magnitude": "KBYTES" }
+			}
+		]
+	}
+}

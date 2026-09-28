@@ -5,6 +5,7 @@
 #include "extflash/extflash.h"
 #include "npu/npu_hw.h"
 #include "npu/infer_task.h"
+#include "npu/aed_model.h"	// AED_MODEL_NAME (CONFIG: 行)
 #include "aed/notify.h"
 #include "lcd/lcd_task.h"
 #include "audio/tap_ring.h"
@@ -187,8 +188,8 @@ EXPORT INT usermain(void)
 
 	/* どの条件のログかを最初の行で分かるようにする (npu/infer_task.h の対照実験のスイッチ)。
 	 * まだレポータが無いので直接 UART に出る = 後で reporter が飢えても消えない */
-	tm_printf((UB*)"CONFIG: %s (INFER_PRIO_INVERT=%d INFER_SLOW_X=%d task_infer pri %d)\n",
-			INFER_CONFIG_NAME, INFER_PRIO_INVERT, INFER_SLOW_X, INFER_TASK_PRI);
+	tm_printf((UB*)"CONFIG: %s (INFER_PRIO_INVERT=%d INFER_SLOW_X=%d task_infer pri %d model=%s)\n",
+			INFER_CONFIG_NAME, INFER_PRIO_INVERT, INFER_SLOW_X, INFER_TASK_PRI, AED_MODEL_NAME);
 
 	tm_putstring((UB*)"Start User-main program.\n");
 

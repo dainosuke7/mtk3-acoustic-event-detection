@@ -5,6 +5,7 @@
 #include "infer_task.h"
 #include "npu_rt.h"
 #include "npu_selftest.h"
+#include "aed_model.h"		// AED_MODEL、AED_MODEL_REF_CLIPS_H
 #include "../aed/preproc.h"
 #include "../aed/notify.h"
 #include "../lcd/lcd_task.h"	// lcd_post_stats() (集計行の disp)
@@ -26,8 +27,8 @@
  * scripts/aed_clips.py の生成物)。ESC-50 由来のデータなのでコミットしない (.gitignore)。
  * 無ければ前処理セルフテストだけを飛ばしてビルドは通す
  */
-#if PREPROC_TEST && __has_include("../aed/aed_ref_clips.h")
-#include "../aed/aed_ref_clips.h"
+#if PREPROC_TEST && __has_include(AED_MODEL_REF_CLIPS_H)
+#include AED_MODEL_REF_CLIPS_H
 #define HAVE_REF_CLIPS		(1)
 #else
 #define HAVE_REF_CLIPS		(0)
@@ -255,12 +256,12 @@ LOCAL void show_summary(const char *why)
 {
 	TAP_STATS	st;
 	UW		under, over, late;
-	UW		n_out, n_held, n_offlist, n_gated_abs, n_gated_rel, lat_max, lat_loose;
+	UW		n_out, n_held, n_offlist, n_gated_abs, n_gated_rel, n_cooldown, lat_max, lat_loose;
 	UW		d_sent, d_drop, d_max, d_avg;
 
 	tap_ring_stats(&st);
 	audio_pt_counts(&under, &over, &late);
-	notify_stats(&n_out, &n_held, &n_offlist, &n_gated_abs, &n_gated_rel, &lat_max, &lat_loose);
+	notify_stats(&n_out, &n_held, &n_offlist, &n_gated_abs, &n_gated_rel, &n_cooldown, &lat_max, &lat_loose);
 
 	log_printf("tap %s: windows=%u (expected %u from %u samples) overrun=%u torn=%u skipped=%u"
 			" seam ok=%u NG=%u\n",
@@ -283,10 +284,10 @@ LOCAL void show_summary(const char *why)
 	/*
 	 * 判定の内訳: out=出した行 / held=続いた unknown で出さなかった窓 /
 	 * offlist=通知対象外のクラスだった窓 / gated_abs=ピークの門で止めた窓 /
-	 * gated_rel=暗騒音からの差の門で止めた窓 (notify.h)
+	 * gated_rel=暗騒音からの差の門で止めた窓 / cooldown=同じクラスの再通知を抑えた窓 (notify.h)
 	 */
-	log_printf("  notify out=%u held=%u offlist=%u gated_abs=%u gated_rel=%u lat max=%uus (%u lower bounds)\n",
-			n_out, n_held, n_offlist, n_gated_abs, n_gated_rel, lat_max, lat_loose);
+	log_printf("  notify out=%u held=%u offlist=%u gated_abs=%u gated_rel=%u cooldown=%u lat max=%uus (%u lower bounds)\n",
+			n_out, n_held, n_offlist, n_gated_abs, n_gated_rel, n_cooldown, lat_max, lat_loose);
 	log_printf("  log sent=%u dropped=%u lag max=%uus\n",
 			log_sent(), log_dropped(), log_lag_max_us());
 
@@ -378,7 +379,7 @@ _Static_assert(AED_REF_SAMPLES == AED_PREPROC_SAMPLES, "ref clip length");
 _Static_assert(AED_REF_TENSOR_LEN == AED_PREPROC_OUT_LEN, "ref tensor size");
 _Static_assert(AED_REF_TENSOR_LEN == NPU_RT_IN_BYTES, "npu input size");
 _Static_assert(AED_REF_CLASSES == NPU_RT_OUT_CLASSES, "class count");
-_Static_assert(AED_REF_ZP == AED_PREPROC_ZP, "quantization zero point");
+/* 量子化 (AED_REF_SCALE / AED_REF_ZP) はモデルの実行時の値と pp_report が比べる */
 
 /* 差が 1 を超える要素があれば前処理の移植が合っていない (float32 と float64 の差では出ない) */
 #define PP_MAX_ABS_DIFF		(1)
@@ -505,17 +506,22 @@ LOCAL void pp_report(BOOL npu_ok)
 	INT	k, max_abs, s_max = 0;
 	BOOL	top_ok, ref_top_ok, pass = TRUE;
 	INT	n_top = 0, n_ref_top = 0;
+	float	q_scale = 0.0f;
+	INT	q_zp = 0;
 
 	audio_pt_counts(&u0, &o0, &l0);
 
 	log_printf("preproc test: %d clips, board log-mel (Application/aed/preproc.c) vs PC"
 			" (scripts/aed_clips.py)\n", AED_REF_CLIP_COUNT);
-	log_printf("  %d x int16 -> int8 1x%dx%d (%d B), zp=%d, mel LUT %u coefs (expected %d)\n",
+	(void)preproc_quant(&q_scale, &q_zp);
+	log_printf("  %d x int16 -> int8 1x%dx%d (%d B), scale=%u e-9 zp=%d, mel LUT %u coefs (expected %d)\n",
 			AED_PREPROC_SAMPLES, AED_PREPROC_MELS, AED_PREPROC_COLS, AED_PREPROC_OUT_LEN,
-			AED_PREPROC_ZP, preproc_mel_coefs(), AED_PREPROC_MEL_COEFS);
-	if(AED_REF_SCALE != AED_PREPROC_SCALE) {
-		log_printf("  [WARN] quantization scale differs from the PC header:"
-				" check AED_PREPROC_SCALE against AED_REF_SCALE\n");
+			(UW)(q_scale * 1e9f + 0.5f), q_zp, preproc_mel_coefs(), AED_PREPROC_MEL_COEFS);
+	if(q_scale != AED_REF_SCALE || q_zp != AED_REF_ZP) {
+		/* ボード (stai_network_get_info) と PC (モデルの入力) で量子化が違えばテンソルは合わない */
+		log_printf("  [WARN] quantization differs from the PC header: board scale=%u e-9 zp=%d,"
+				" header scale=%u e-9 zp=%d (regenerate aed_ref_clips.h for this model)\n",
+				(UW)(q_scale * 1e9f + 0.5f), q_zp, (UW)(AED_REF_SCALE * 1e9f + 0.5f), AED_REF_ZP);
 		pass = FALSE;
 	}
 	if(preproc_mel_coefs() != AED_PREPROC_MEL_COEFS) {
@@ -676,6 +682,27 @@ LOCAL void task_infer(INT stacd, void *exinf)
 
 	er = npu_rt_init();
 	log_printf("npu_rt_init: ret=%d\n", er);
+
+	/*
+	 * 前処理の量子化 (scale / zero_point) はモデルの入力の値 (stai_network_get_info)。
+	 * NPU が使えないときも、前処理の突き合わせだけはできるよう PC のヘッダの値を使う
+	 */
+	{
+		float	q_scale;
+		INT	q_zp;
+
+		if(er == E_OK && npu_rt_input_quant(&q_scale, &q_zp)) {
+			preproc_set_quant(q_scale, q_zp);
+		}
+#if HAVE_REF_CLIPS
+		else {
+			preproc_set_quant(AED_REF_SCALE, AED_REF_ZP);
+			log_printf("preproc quant: NPU not ready, using the PC header (scale=%u e-9 zp=%d)\n",
+					(UW)(AED_REF_SCALE * 1e9f + 0.5f), AED_REF_ZP);
+		}
+#endif
+	}
+
 	if(er == E_OK) npu_ok = npu_selftest();
 	(void)tk_sig_sem(semid_done, 1);
 

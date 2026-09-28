@@ -57,15 +57,28 @@ LOCAL UB			*fb = (UB *)LCD_FB_ADDR;
 /*
  * パレット。HAL_LTDC_ConfigCLUT は各要素の下位 24bit (0x00RRGGBB) を使い、
  * 添字は自分で付ける (stm32n6xx_hal_ltdc.c の HAL_LTDC_ConfigCLUT)。
- * 0 と 1 だけ使い、残りは黒のまま空けておく (タスク2-2 以降で色を足す)
+ * 0〜5 を使い、残りは黒のまま空けておく。2〜5 は通知の背景色 (lcd.h の LCD_RED 等。タスク5-4)
  */
 LOCAL const uint32_t	clut[LCD_CLUT_LEN] = {
 	0x00000000U,	/* 0 LCD_BLACK */
 	0x00FFFFFFU,	/* 1 LCD_WHITE */
+	0x00E00000U,	/* 2 LCD_RED    (GLASS) */
+	0x00FFD800U,	/* 3 LCD_YELLOW (KNOCK / DOG) */
+	0x00FF8000U,	/* 4 LCD_ORANGE (CRY) */
+	0x000050FFU,	/* 5 LCD_BLUE   (VOICE / SNEEZE) */
 	0x00000000U, 0x00000000U, 0x00000000U, 0x00000000U, 0x00000000U, 0x00000000U,
-	0x00000000U, 0x00000000U, 0x00000000U, 0x00000000U, 0x00000000U, 0x00000000U,
-	0x00000000U, 0x00000000U
+	0x00000000U, 0x00000000U, 0x00000000U, 0x00000000U
 };
+
+EXPORT UB lcd_contrast_color(UB bg)
+{
+	uint32_t	c = (bg < LCD_CLUT_LEN) ? clut[bg] : 0U;
+	UINT		luma;
+
+	/* 輝度 (BT.601 の重み。0〜255)。半分より明るい背景なら黒い文字、暗ければ白い文字 */
+	luma = (299U * ((c >> 16) & 0xFFU) + 587U * ((c >> 8) & 0xFFU) + 114U * (c & 0xFFU)) / 1000U;
+	return (luma >= 128U) ? LCD_BLACK : LCD_WHITE;
+}
 
 /* ---------------------------------------------------------------- */
 /* RIF (LTDC を AXISRAM3 の読み手として通す)                           */

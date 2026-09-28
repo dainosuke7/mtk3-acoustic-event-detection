@@ -46,6 +46,10 @@ MEMORY
 {
   ROM    (xrw)    : ORIGIN = 0x34000400,   LENGTH = 511K
   RAM    (xrw)    : ORIGIN = 0x34080000,   LENGTH = 1536K
+  /* NPU モデルの重み (FSD50K 版。Application/npu/model_fsd50k/network_weights.c の .npu_weights)。
+     network.c が絶対番地で参照するメモリプール (scripts/stedgeai/stm32n6_axisram.mpool の AXISRAM4)
+     と同じ番地。デバッガが elf と一緒に載せる (Debug 起動専用。model_fsd50k/README.md) */
+  AXISRAM4 (r)    : ORIGIN = 0x34270000,   LENGTH = 448K
 }
 
 /* Sections */
@@ -154,6 +158,16 @@ SECTIONS
     . = ALIGN(8);
     __enoncacheable = .;  /* create symbol for end of section */
   } > RAM
+
+  /* NPU モデルの重み (FSD50K 版)。先頭が AXISRAM4 の先頭 = network.c のメモリプールの番地。無ければ空 */
+  .npu_weights :
+  {
+    . = ALIGN(64);
+    __snpu_weights = .;
+    KEEP(*(.npu_weights))
+    . = ALIGN(64);
+    __enpu_weights = .;
+  } > AXISRAM4
 
   .gnu.sgstubs :
   {

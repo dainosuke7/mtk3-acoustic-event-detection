@@ -33,7 +33,6 @@ Application/lcd/st \
 Application/npu \
 Application/npu/st/device \
 Application/npu/st/ll_aton \
-Application/npu/st/model \
 Application/trace \
 Application \
 Core/Src \

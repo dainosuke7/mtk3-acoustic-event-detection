@@ -71,7 +71,6 @@
 									<listOptionValue builtIn="false" value="../Application/npu/st/ll_aton"/>
 									<listOptionValue builtIn="false" value="../Application/npu/st/device"/>
 									<listOptionValue builtIn="false" value="../Application/npu/st/inc"/>
-									<listOptionValue builtIn="false" value="../Application/npu/st/model"/>
 								</option>
 								<inputType id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.input.c.1265952573" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.input.c"/>
 							</tool>
@@ -82,7 +81,7 @@
 							<tool id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.linker.1148661659" name="MCU/MPU GCC Linker" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.linker">
 								<option id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.linker.option.script.179185591" name="Linker Script (-T)" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.linker.option.script" value="${workspace_loc:/${ProjName}/STM32N657X0HXQ_LRUN.ld}" valueType="string"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.linker.option.libraries.1739051846" name="Libraries (-l)" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.linker.option.libraries" valueType="libs">
-									<listOptionValue builtIn="false" value=":NetworkRuntime1200_CM55_GCC.a"/>
+									<listOptionValue builtIn="false" value=":NetworkRuntime1201_CM55_GCC.a"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.linker.option.directories.1239804517" name="Library search path (-L)" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.linker.option.directories" valueType="libPaths">
 									<listOptionValue builtIn="false" value="../Application/npu/st/lib"/>
@@ -107,7 +106,7 @@
 						<tool id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.468493237.1433727566" name="MCU/MPU GCC Compiler" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.468493237"/>
 					</fileInfo>
 					<sourceEntries>
-						<entry excluding="app_i2c.c|app_adc.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Application"/>
+						<entry excluding="app_i2c.c|app_adc.c|npu/model_esc10|npu/model_fsd50k" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Application"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Core"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="Drivers"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="mtk3_bsp2"/>

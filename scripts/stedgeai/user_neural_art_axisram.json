@@ -1,0 +1,9 @@
+{
+    "Profiles": {
+        "axisram":
+        {
+            "memory_pool": "./stm32n6_axisram.mpool",
+            "options": "--Ocache-opt -O3 --Os --native-float --Omax-ca-pipe 4 --cache-maintenance --csv-file network --all-buffers-info"
+        }
+    }
+}

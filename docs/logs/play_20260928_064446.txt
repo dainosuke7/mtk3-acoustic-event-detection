@@ -1,0 +1,53 @@
+# aed_play_test start 2026-09-28 06:44:46
+# 5.0s silence 60.0s / 65.0s clips 8 x 5s every 15.0s / 185.0s manual 14 x every 15.0s / end 395.0s
+# clips from ..\ref\ESC-50 (fold 5), peak normalized to -3.0dBFS, model fsd50k
+# SYNC/PHASE/CLIP/MANUAL。時刻は 開始からの経過秒 と PC の時計 (HH:MM:SS.mmm)
+#  1 door_wood_knock 5-218980-A-30.wav    rms= -36.4dBFS gain=  +6.0dB
+#  2 glass_breaking  5-221528-A-39.wav    rms= -27.8dBFS gain=  -3.0dB
+#  3 crying_baby     5-151085-A-20.wav    rms= -20.6dBFS gain=  -1.5dB
+#  4 clock_tick      5-201194-A-38.wav    rms= -37.2dBFS gain=  +4.9dB
+#  5 door_wood_knock 5-235644-A-30.wav    rms= -25.6dBFS gain=  -3.0dB
+#  6 glass_breaking  5-233605-A-39.wav    rms= -21.5dBFS gain=  -3.0dB
+#  7 crying_baby     5-198411-B-20.wav    rms= -22.0dBFS gain=  +1.2dB
+#  8 clock_tick      5-208624-A-38.wav    rms= -36.8dBFS gain=  +9.7dB
+# manual  1 knock (ドアをノックする (2〜3回))
+# manual  2 handclap (手を1回たたく)
+# manual  3 paper (紙をくしゃくしゃにする)
+# manual  4 cough (咳ばらいをする)
+# manual  5 chair (椅子を引く)
+# manual  6 mug (マグを机に置く)
+# manual  7 speech (一言しゃべる (「こんにちは」など 2〜3 秒))
+# manual  8 knock (ドアをノックする (2〜3回))
+# manual  9 handclap (手を1回たたく)
+# manual 10 paper (紙をくしゃくしゃにする)
+# manual 11 cough (咳ばらいをする)
+# manual 12 chair (椅子を引く)
+# manual 13 mug (マグを机に置く)
+# manual 14 speech (一言しゃべる (「こんにちは」など 2〜3 秒))
+[+0.0s 06:44:46.530]    SYNC clap
+[+5.0s 06:44:51.537]    PHASE silence
+[+65.0s 06:45:51.536]   PHASE clips
+[+65.0s 06:45:51.536]   CLIP door_wood_knock 5-218980-A-30.wav rms=-36.4dBFS gain=+6.0dB
+[+80.0s 06:46:06.526]   CLIP glass_breaking 5-221528-A-39.wav rms=-27.8dBFS gain=-3.0dB
+[+95.0s 06:46:21.535]   CLIP crying_baby 5-151085-A-20.wav rms=-20.6dBFS gain=-1.5dB
+[+110.0s 06:46:36.535]  CLIP clock_tick 5-201194-A-38.wav rms=-37.2dBFS gain=+4.9dB
+[+125.0s 06:46:51.527]  CLIP door_wood_knock 5-235644-A-30.wav rms=-25.6dBFS gain=-3.0dB
+[+140.0s 06:47:06.523]  CLIP glass_breaking 5-233605-A-39.wav rms=-21.5dBFS gain=-3.0dB
+[+155.0s 06:47:21.538]  CLIP crying_baby 5-198411-B-20.wav rms=-22.0dBFS gain=+1.2dB
+[+170.0s 06:47:36.524]  CLIP clock_tick 5-208624-A-38.wav rms=-36.8dBFS gain=+9.7dB
+[+185.0s 06:47:51.539]  PHASE manual
+[+185.0s 06:47:51.539]  MANUAL knock
+[+200.0s 06:48:06.523]  MANUAL handclap
+[+215.0s 06:48:21.530]  MANUAL paper
+[+230.0s 06:48:36.535]  MANUAL cough
+[+245.0s 06:48:51.534]  MANUAL chair
+[+260.0s 06:49:06.532]  MANUAL mug
+[+275.0s 06:49:21.525]  MANUAL speech
+[+290.0s 06:49:36.534]  MANUAL knock
+[+305.0s 06:49:51.525]  MANUAL handclap
+[+320.0s 06:50:06.527]  MANUAL paper
+[+335.0s 06:50:21.524]  MANUAL cough
+[+350.0s 06:50:36.535]  MANUAL chair
+[+365.0s 06:50:51.537]  MANUAL mug
+[+380.0s 06:51:06.533]  MANUAL speech
+# aed_play_test end (+395.0s)

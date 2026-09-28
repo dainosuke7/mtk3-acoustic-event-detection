@@ -24,8 +24,15 @@
 元の RMS と掛けたゲインはログに残す。正規化はメモリ上で行い、winsound の SND_MEMORY で
 同期再生する (SND_ASYNC は winsound が許さない。PLAY_FLAGS のところに理由)。
 
+FSD50K 版 (--model fsd50k。5-1):
+    クリップは door_wood_knock / glass_breaking / crying_baby (通知対象 Knock / Glass / Crying) を各 2 本と
+    対象外の clock_tick 2 本の 8 本 (順は knock, glass, crying, clock を 2 巡。scripts/aed_clips.py の
+    CLIPS_FSD50K)。生活音の区間に「一言しゃべる」(Speech の検出と、続いている間は 1 回の確認) を足して
+    7 種を 2 巡。ノックは FSD50K 版では通知対象なので、生活音区間の knock は検出の確認になる
+
 使い方 (uv が依存パッケージを用意する):
     uv run scripts/aed_play_test.py <ESC-50>
+    uv run scripts/aed_play_test.py <ESC-50> --model fsd50k                FSD50K 版のクリップと生活音
     uv run scripts/aed_play_test.py <ESC-50> --dry-run                  クリップを鳴らさない
     uv run scripts/aed_play_test.py <ESC-50> --skip-manual              生活音の区間を飛ばす
     uv run scripts/aed_play_test.py <ESC-50> --silence 5 --interval 6   短くして動作確認
@@ -61,7 +68,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from aed_clips import CLIPS, clip_path, read_meta  # noqa: E402
+from aed_clips import CLIPS, CLIPS_FSD50K, PLAY_ORDER_FSD50K, clip_path, read_meta  # noqa: E402
 
 try:
     import winsound
@@ -100,6 +107,11 @@ MANUAL_ITEMS = [
     ("mug",      "マグを机に置く"),
 ]
 MANUAL_REPEAT = 2
+
+# FSD50K 版: 上に「一言しゃべる」を足す (Speech は通知対象。30 秒のクールダウンで「続いている間は 1 回」)
+MANUAL_ITEMS_FSD50K = MANUAL_ITEMS + [
+    ("speech",   "一言しゃべる (「こんにちは」など 2〜3 秒)"),
+]
 
 
 def row(elapsed: float, clock: datetime, tag: str, detail: str) -> str:
@@ -163,7 +175,14 @@ def main() -> None:
                     help=f"クリップ・生活音を出す間隔 [秒] (既定 {INTERVAL_S})")
     ap.add_argument("--dry-run", action="store_true", help="クリップを鳴らさずに進行だけ")
     ap.add_argument("--skip-manual", action="store_true", help="クラス外の生活音の区間を飛ばす")
+    ap.add_argument("--model", choices=["esc10", "fsd50k"], default="esc10",
+                    help="鳴らすクリップと生活音の組 (既定 esc10)")
     args = ap.parse_args()
+
+    if args.model == "fsd50k":
+        play_order, clip_table, manual_items, esc10_only = PLAY_ORDER_FSD50K, CLIPS_FSD50K, MANUAL_ITEMS_FSD50K, False
+    else:
+        play_order, clip_table, manual_items, esc10_only = PLAY_ORDER, CLIPS, MANUAL_ITEMS, True
 
     # 同期再生なので PlaySound は再生時間ぶん戻ってこない。しかも少し余分にかかる
     # (実測: 5.00 秒の音で 5.5 秒)。間隔をクリップ長ぎりぎりにすると毎回わずかに遅れる
@@ -183,11 +202,11 @@ def main() -> None:
     meta = read_meta(args.esc50)
     clips = []
     for rep in range(REPEAT):
-        for label in PLAY_ORDER:
-            if rep >= len(CLIPS[label]):
+        for label in play_order:
+            if rep >= len(clip_table[label]):
                 sys.exit(f"{label}: CLIPS に {rep + 1} 本目が無い")
-            fn = CLIPS[label][rep]
-            wav, rms_db, gain_db = load_clip(clip_path(meta, fn, label, args.esc50))
+            fn = clip_table[label][rep]
+            wav, rms_db, gain_db = load_clip(clip_path(meta, fn, label, args.esc50, esc10=esc10_only))
             clips.append({"label": label, "file": fn, "wav": wav,
                           "rms_db": rms_db, "gain_db": gain_db})
 
@@ -205,7 +224,7 @@ def main() -> None:
         except RuntimeError as e:
             sys.exit(f"再生できない: {e}")
 
-    manual = [] if args.skip_manual else MANUAL_ITEMS * MANUAL_REPEAT
+    manual = [] if args.skip_manual else manual_items * MANUAL_REPEAT
 
     # 区間の境目 (開始からの秒)
     t_silence = SYNC_S
@@ -234,7 +253,8 @@ def main() -> None:
             f" / {t_clips:.1f}s clips {len(clips)} x {CLIP_LEN_S:.0f}s every {args.interval:.1f}s"
             f" / {t_manual:.1f}s manual {len(manual)} x every {args.interval:.1f}s"
             f" / end {t_end:.1f}s")
-        out(f"# clips from {args.esc50} (ESC-10, fold 5), peak normalized to {TARGET_PEAK_DBFS}dBFS")
+        out(f"# clips from {args.esc50} ({'ESC-10, ' if esc10_only else ''}fold 5), "
+            f"peak normalized to {TARGET_PEAK_DBFS}dBFS, model {args.model}")
         out("# SYNC/PHASE/CLIP/MANUAL。時刻は 開始からの経過秒 と PC の時計 (HH:MM:SS.mmm)")
 
         # --- 使うクリップの一覧 (鳴らす前に全部見せる) ---

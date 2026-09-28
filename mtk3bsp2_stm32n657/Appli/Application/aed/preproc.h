@@ -36,12 +36,12 @@
 #define AED_PREPROC_OUT_LEN	(AED_PREPROC_MELS * AED_PREPROC_COLS)	/* 6144 */
 
 /*
- * モデル入力の量子化 (yamnet_1024_64x96_tl_qdq_int8.onnx の入力直後の QuantizeLinear)。
- * PC 側と同じ値であることは、生成ヘッダ aed_ref_clips.h の AED_REF_SCALE / AED_REF_ZP と
- * infer_task.c の _Static_assert で確かめる
+ * モデル入力の量子化 (scale / zero_point) はモデルごとに違う (ESC10 0.0305305421 / 33、
+ * FSD50K 0.0555472746 / 38) ので、ここに定数は持たない。起動時に npu_rt_init が
+ * stai_network_get_info から読み、推論タスクが preproc_set_quant() で渡す。PC 側 (生成ヘッダ
+ * aed_ref_clips.h の AED_REF_SCALE / AED_REF_ZP) と同じ値であることは infer_task.c の
+ * 前処理セルフテストが実行時に確かめる
  */
-#define AED_PREPROC_SCALE	(0.0305305421f)
-#define AED_PREPROC_ZP		(33)
 
 /* メルフィルタの非ゼロ係数の数。ST の表 (user_mel_tables.c.aed) と PC の表は 461 個 */
 #define AED_PREPROC_MEL_COEFS	(461)
@@ -53,8 +53,17 @@
  */
 EXPORT ER preproc_init(void);
 
-/* preproc_init() が成功したか */
+/* preproc_init() が成功し、preproc_set_quant() も済んでいるか (両方そろって preproc_run が動く) */
 EXPORT BOOL preproc_ready(void);
+
+/*
+ * 量子化の scale / zero_point を設定する (npu_rt_input_quant の値。preproc_run より前に 1 回)。
+ * 1/scale を float で持ち、毎窓の割り算を避ける。scale が 0 以下なら未設定のまま
+ */
+EXPORT void preproc_set_quant(float scale, INT zp);
+
+/* 設定済みの scale / zero_point。未設定なら FALSE */
+EXPORT BOOL preproc_quant(float *scale, INT *zp);
 
 /*
  * pcm (AED_PREPROC_SAMPLES サンプル) を out (AED_PREPROC_OUT_LEN バイト) にする。

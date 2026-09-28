@@ -1,4 +1,4 @@
-logs/
+/logs/
 .claude/
 
 **/.settings/com.st.stm32cube.ide.mcu.sfrview.prefs
@@ -24,5 +24,10 @@ __pycache__/
 
 # ESC-50 の録音から作った NPU の比較用入力 (scripts/aed_clips.py の生成物)。
 # 元の音声のライセンス (CC BY / CC BY-NC) のため入れない。スクリプトで再生成する
-mtk3bsp2_stm32n657/Appli/Application/npu/aed_test_clips.h
-mtk3bsp2_stm32n657/Appli/Application/aed/aed_ref_clips.h
+mtk3bsp2_stm32n657/Appli/Application/npu/model_*/aed_test_clips.h
+mtk3bsp2_stm32n657/Appli/Application/npu/model_*/aed_ref_clips.h
+
+# stedgeai の出力と作業ディレクトリ (scripts/stedgeai/。生成物は model_*/ に写す。重みの hex/bin も *.hex/*.bin で除外済み)
+scripts/stedgeai/st_ai_output*/
+scripts/stedgeai/st_ai_ws*/
+mtk3bsp2_stm32n657/Appli/Application/npu/model_*/network_c_info.json

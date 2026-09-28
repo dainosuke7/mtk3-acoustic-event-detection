@@ -28,9 +28,19 @@
 #define LCD_FB_SIZE	(LCD_WIDTH * LCD_HEIGHT)	/* L8 なので 1 画素 1 バイト */
 #define LCD_CLUT_LEN	(16)				/* パレットの色数 */
 
-/* パレットの番号 (CLUT の添字)。増やすときは lcd.c の clut[] にも足す */
+/*
+ * パレットの番号 (CLUT の添字)。増やすときは lcd.c の clut[] にも足す。
+ * 2〜5 は通知の背景色 (タスク5-4。クラスごとの割り当ては model_<name>/aed_model_cfg.h の AED_DISP_COLORS)
+ */
 #define LCD_BLACK	(0)
 #define LCD_WHITE	(1)
+#define LCD_RED		(2)
+#define LCD_YELLOW	(3)
+#define LCD_ORANGE	(4)
+#define LCD_BLUE	(5)
+
+/* 背景色 bg の上で読める文字色 (明るい背景なら黒、暗い背景なら白。CLUT の RGB の輝度で決める) */
+EXPORT UB lcd_contrast_color(UB bg);
 
 /*
  * GPIO → LTDC → レイヤ/CLUT の順に初期化する。段階ごとに結果をログに出す。

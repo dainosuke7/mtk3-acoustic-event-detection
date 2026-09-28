@@ -9,6 +9,9 @@ Phase 1 タスク5 で用意し、タスク6 でボード (NPU) の出力と比�
 
 使い方 (uv が依存パッケージを用意する):
     uv run scripts/aed_ref.py <yamnet_1024_64x96_tl_qdq_int8.onnx>
+        → mtk3bsp2_stm32n657/Appli/Application/npu/model_esc10/aed_test_input.h (ESC10 版)
+    FSD50K 版 (tflite) の同じヘッダは scripts/aed_clips.py --model fsd50k が
+    ここの write_test_input_header() を使って model_fsd50k/ に作る
 
 モデルは STM32N6-GettingStarted-Audio v2.3.0 の
 Projects/X-CUBE-AI/models/yamnet_1024_64x96_tl_qdq_int8.onnx (README 参照)。
@@ -53,8 +56,8 @@ CLASSES = [  # ST の Projects/Dpu/ai_model_config.h.aed の CTRL_X_CUBE_AI_MODE
 
 REPO = Path(__file__).resolve().parent.parent
 NPU_DIR = REPO / "mtk3bsp2_stm32n657" / "Appli" / "Application" / "npu"
-STAI_H = NPU_DIR / "st" / "model" / "stai_network.h"
-OUT_H = NPU_DIR / "aed_test_input.h"
+STAI_H = NPU_DIR / "model_esc10" / "stai_network.h"
+OUT_H = NPU_DIR / "model_esc10" / "aed_test_input.h"
 
 
 def onnx_input_quant(model: onnx.ModelProto) -> tuple[str, np.float32, int]:
@@ -137,82 +140,102 @@ def run(model_bytes: bytes, name: str, x: np.ndarray, optimize: bool) -> list[np
 
 
 def c_float(v: np.float32) -> str:
-    return f"{float(v):.9g}f"
+    """C の float リテラル。0 や 1 のような整数値でも "0.0f" にする ("0f" は C で不正)"""
+    s = f"{float(v):.9g}"
+    if not any(ch in s for ch in ".eEn"):
+        s += ".0"
+    return s + "f"
 
 
-def write_header(q: np.ndarray, y_opt: np.ndarray, y_flt: np.ndarray,
-                 scale: np.float32, zp: int, sha256: str,
-                 l_opt: np.ndarray, l_flt: np.ndarray, l_scale: np.float32, l_zp: int) -> None:
+def write_test_input_header(out_h: Path, q: np.ndarray, y_a: np.ndarray, y_b: np.ndarray,
+                            scale: np.float32, zp: int, classes: list[str],
+                            model_lines: list[str], pc_a: str, pc_b: str, gen_by: str,
+                            l_a: np.ndarray, l_b: np.ndarray, l_scale: np.float32, l_zp: int,
+                            logit_note: str) -> None:
+    """乱数入力と PC の期待値を C ヘッダに書く (ESC10 版と FSD50K 版で同じ形式。npu_selftest.c が読む)。
+
+    y_a / l_a は PC の第1の実装の softmax 後 / softmax 直前 int8 (aed_test_expect_ort / aed_test_logits_ort)、
+    y_b / l_b は第2の実装 (aed_test_expect_ort_float / aed_test_logits_ort_noopt)。
+    配列名は ESC10 版 (ONNX Runtime の最適化あり / なし) の名残で、FSD50K 版 (TFLite の
+    最適化カーネル / 参照カーネル) も同じ名前で書く。
+    """
     flat = q.reshape(-1)  # C の並び (メルが外側、フレームが内側)
-    rows = []
-    for i in range(0, flat.size, 16):
-        rows.append("\t" + ", ".join(f"{int(v):4d}" for v in flat[i:i + 16]) + ",")
-    names = ", ".join(f'"{c}"' for c in CLASSES)
+    rows = ["\t" + ", ".join(f"{int(v):4d}" for v in flat[i:i + 16]) + "," for i in range(0, flat.size, 16)]
+    names = ", ".join(f'"{c}"' for c in classes)
     c_int8 = lambda v: ", ".join(f"{int(x):4d}" for x in v)
-    text = f"""/* 自動生成: scripts/aed_ref.py。手で編集しない (作り直すときはスクリプトを実行する) */
+    top_a, top_b = int(np.argmax(y_a)), int(np.argmax(y_b))
+    model_txt = "\n".join((" *   モデル: " if i == 0 else " *           ") + line for i, line in enumerate(model_lines))
+    top_note = "2つの実装で同じ" if top_a == top_b else f"2つの実装で違う ({classes[top_a]} / {classes[top_b]})。第1の実装の値"
+    text = f"""/* 自動生成: {gen_by}。手で編集しない (作り直すときはスクリプトを実行する) */
 #ifndef NPU_AED_TEST_INPUT_H
 #define NPU_AED_TEST_INPUT_H
 
 #include <stdint.h>
 
 /*
- * AED モデルの比較用の固定入力と、ONNX Runtime で求めた期待値 (Phase 1 タスク6 で使う)
+ * AED モデルの比較用の固定入力と、PC で求めた期待値 (npu_selftest.c が使う)
  *
- *   モデル: yamnet_1024_64x96_tl_qdq_int8.onnx
- *           sha256 {sha256}
+{model_txt}
  *   入力:   int8 1x64x96x1。一様乱数 [-128, 127]、numpy default_rng(seed={SEED})
  *           並びは [メル 0..63][フレーム 0..95] (フレームが内側)。NPU の入力バッファ
  *           (npu_rt_input()) にこのままコピーし、D キャッシュを clean+invalidate してから推論する
- *   量子化: scale={float(scale):.9g}, zero_point={zp} (NPU 版と ONNX で一致を確認済み)。
- *           ONNX には (q - zero_point) * scale の float32 を渡した
- *   期待値: ONNX Runtime {ort.__version__} (CPU)。softmax 後の float32
+ *   量子化: scale={float(scale):.9g}, zero_point={zp} (モデルの入力の値。ボードは stai_network_get_info の値と照合する)
+ *   期待値: 第1の実装 = {pc_a}
+ *           第2の実装 = {pc_b}
+ *           (aed_test_expect_ort / _ort_float は softmax 後の float32、aed_test_logits_* は softmax 直前の int8)
  *
  * static な配列なので、このヘッダを include するのは1つの .c だけにする。
  */
 
 #define AED_TEST_SEED		({SEED})
 #define AED_TEST_INPUT_LEN	({flat.size})
-#define AED_TEST_CLASSES	({len(CLASSES)})
+#define AED_TEST_CLASSES	({len(classes)})
+#define AED_TEST_SCALE		({float(scale):.9g}f)
+#define AED_TEST_ZP		({zp})
+
+/* 乱数入力での PC の1位 ({top_note}) */
+#define AED_TEST_EXPECT_TOP	"{classes[top_a]}"
 
 static const int8_t aed_test_input[AED_TEST_INPUT_LEN] __attribute__((aligned(32))) = {{
 {chr(10).join(rows)}
 }};
 
-/* ONNX Runtime の既定 (QDQ を int8 演算に融合)。NPU の整数演算に近いのはこちらの見込み */
+/* 第1の実装: {pc_a} */
 static const float aed_test_expect_ort[AED_TEST_CLASSES] = {{
-	{", ".join(c_float(v) for v in y_opt)}
+	{", ".join(c_float(v) for v in y_a)}
 }};
 
-/* ONNX Runtime のグラフ最適化なし (float で量子化を模擬) */
+/* 第2の実装: {pc_b} */
 static const float aed_test_expect_ort_float[AED_TEST_CLASSES] = {{
-	{", ".join(c_float(v) for v in y_flt)}
+	{", ".join(c_float(v) for v in y_b)}
 }};
 
-/* クラス名 (出力の並び。ST の ai_model_config.h.aed と同じ) */
+/* クラス名 (出力の並び。モデルの config の class_names を昇順に並べたもの) */
 static const char *const aed_test_class_names[AED_TEST_CLASSES] = {{
 	{names}
 }};
 
 /*
- * softmax 直前の int8 ロジット (DequantizeLinear の入力)。
+ * softmax 直前の int8 ロジット。{logit_note}
  * float のロジット = (q - AED_TEST_LOGIT_ZP) * AED_TEST_LOGIT_SCALE が Softmax に入る
  */
 #define AED_TEST_LOGIT_SCALE	({c_float(l_scale)})
 #define AED_TEST_LOGIT_ZP	({l_zp})
 
-/* ONNX Runtime の既定 (QDQ を int8 演算に融合) */
+/* 第1の実装 */
 static const int8_t aed_test_logits_ort[AED_TEST_CLASSES] = {{
-	{c_int8(l_opt)}
+	{c_int8(l_a)}
 }};
 
-/* ONNX Runtime のグラフ最適化なし (float で計算し、QuantizeLinear で int8 に丸めた値) */
+/* 第2の実装 */
 static const int8_t aed_test_logits_ort_noopt[AED_TEST_CLASSES] = {{
-	{c_int8(l_flt)}
+	{c_int8(l_b)}
 }};
 
 #endif	/* NPU_AED_TEST_INPUT_H */
 """
-    OUT_H.write_text(text, encoding="utf-8", newline="\n")
+    out_h.parent.mkdir(parents=True, exist_ok=True)
+    out_h.write_text(text, encoding="utf-8", newline="\n")
 
 
 def main() -> None:
@@ -277,7 +300,13 @@ def main() -> None:
         print(f"{i:>2} {c:<15} {int(l_opt[i]):9d} {int(l_flt[i]):9d} "
               f"{int(l_opt[i]) - int(l_flt[i]):5d} {lf_opt[i]:14.6f} {lf_flt[i]:13.6f}")
 
-    write_header(q, y_opt, y_flt, scale, zp, sha256, l_opt, l_flt, l_scale, l_zp)
+    write_test_input_header(
+        OUT_H, q, y_opt, y_flt, scale, zp, CLASSES,
+        [f"{args.onnx.name} (ESC-10。ST の GettingStarted-Audio v2.3.0)", f"sha256 {sha256}"],
+        f"ONNX Runtime {ort.__version__} (CPU) の既定 (QDQ を int8 演算に融合)",
+        f"ONNX Runtime {ort.__version__} (CPU) のグラフ最適化なし (float で量子化を模擬)",
+        "scripts/aed_ref.py", l_opt, l_flt, l_scale, l_zp,
+        "ONNX の DequantizeLinear の入力。第1は int8 演算の値、第2は float で計算して QuantizeLinear で丸めた値")
     print(f"\nwrote {OUT_H.relative_to(REPO)}")
 
 
