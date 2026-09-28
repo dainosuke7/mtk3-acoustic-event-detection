@@ -14,14 +14,14 @@ CubeMX 生成コードなどに手で足した箇所は 2 節に列挙します�
 
 | 名称 | 権利者 | 入手方法 (URL) | 機能 | ライセンス（確認元） | 改変の有無と箇所 |
 |---|---|---|---|---|---|
-| μT-Kernel 3.0 BSP2（カーネル μT-Kernel 3.0、`VER_MAJOR 3` / `VER_MINOR 0`） | Ken Sakamura / TRON Forum | https://github.com/tron-forum/mtk3_bsp2 （**要確認**: 取得したリリースのタグと取得日） | リアルタイム OS 本体と STM32N6570-DK 向け BSP（CubeIDE プロジェクト、リンカスクリプト、tm_printf のシリアル出力）。`mtk3bsp2_stm32n657/Appli/mtk3_bsp2/` | T-License 2.2（カーネルの各ソースのヘッダ。BSP 部には T-License 2.1 のヘッダも混在） | 無改変（コンフィグも既定）。Appli プロジェクトのリンカスクリプトだけ 2 節のとおり追記 |
+| μT-Kernel 3.0 BSP2（カーネル μT-Kernel 3.0、`VER_MAJOR 3` / `VER_MINOR 0`） | Ken Sakamura / TRON Forum | https://github.com/tron-forum/mtk3_bsp2 の develop ブランチ、コミット 85b88ce（2026-07-03。同梱の README.md・doc/ 4 本が一致し、カーネルは同コミットのサブモジュール mtkernel_3 435096c = ソースの版表示 3.00.07.B0。リリースタグでは v1.00.04（2026-05-13）より後で、doc/bsp2_stm32_cube_jp.md の版は 01.00.B8 / 2026.06.23）。取得日は 2026-08-28 以前（本リポジトリの初回コミット） | リアルタイム OS 本体と STM32N6570-DK 向け BSP（CubeIDE プロジェクト、リンカスクリプト、tm_printf のシリアル出力）。`mtk3bsp2_stm32n657/Appli/mtk3_bsp2/` | T-License 2.2（カーネルの各ソースのヘッダ。BSP 部には T-License 2.1 のヘッダも混在） | 無改変（コンフィグも既定）。Appli プロジェクトのリンカスクリプトだけ 2 節のとおり追記 |
 | STM32N6xx HAL / LL ドライバ v1.3.0 | STMicroelectronics | https://github.com/STMicroelectronics/stm32n6xx-hal-driver （STM32CubeN6 v1.3.0 https://github.com/STMicroelectronics/STM32CubeN6 の一部） | ペリフェラルのドライバ（RCC, GPIO, GPDMA, MDF, SAI, I2C, XSPI, LTDC ほか）。`mtk3bsp2_stm32n657/Drivers/STM32N6xx_HAL_Driver/` | BSD-3-Clause（`Drivers/STM32N6xx_HAL_Driver/LICENSE.txt`） | 無改変。LTDC ドライバ 4 本（`stm32n6xx_hal_ltdc.c/.h`, `stm32n6xx_hal_ltdc_ex.c/.h`）は手元の配布物に無かったので同じ v1.3.0 から追加（無改変）。使うドライバの有効化は 2 節の `stm32n6xx_hal_conf.h` |
 | CMSIS-Core(M) 6.1 | Arm Limited | https://github.com/ARM-software/CMSIS_6 | Cortex-M55 のコア定義・キャッシュ操作（`Drivers/CMSIS/Include/`） | Apache-2.0（`Drivers/CMSIS/LICENSE`） | 無改変 |
 | CMSIS Device STM32N6xx v1.3.0 | STMicroelectronics | https://github.com/STMicroelectronics/cmsis-device-n6 | レジスタ定義、スタートアップコード、システム初期化（`Drivers/CMSIS/Device/ST/STM32N6xx/`） | Apache-2.0（`Drivers/CMSIS/Device/ST/STM32N6xx/LICENSE.txt`） | 無改変 |
-| STM32 ExtMem Manager v1.5.0 | STMicroelectronics | https://github.com/STMicroelectronics/stm32-mw-extmem-mgr （STM32CubeN6 v1.3.0 同梱の版） | FSBL の外部フラッシュ初期化とアプリケーションの起動（`mtk3bsp2_stm32n657/Middlewares/ST/STM32_ExtMem_Manager/`。FSBL からのみ使用） | SLA0044（入手元リポジトリの `LICENSE.md`。同梱した写しには LICENSE ファイルが無く、ソースのヘッダは「コンポーネント直下の LICENSE に従う」としているので、提出前に写しを置く） | 無改変 |
+| STM32 ExtMem Manager v1.5.0 | STMicroelectronics | https://github.com/STMicroelectronics/stm32-mw-extmem-mgr （STM32CubeN6 v1.3.0 同梱の版） | FSBL の外部フラッシュ初期化とアプリケーションの起動（`mtk3bsp2_stm32n657/Middlewares/ST/STM32_ExtMem_Manager/`。FSBL からのみ使用） | SLA0044（同梱の `mtk3bsp2_stm32n657/Middlewares/ST/STM32_ExtMem_Manager/LICENSE.md`。入手元リポジトリ v1.5.0 の `LICENSE.md` の写し） | 無改変 |
 | MX66UW1G45G コンポーネントドライバ v1.1.0 | STMicroelectronics | https://github.com/STMicroelectronics/stm32-mx66uw1g45g | 外部 NOR フラッシュへのコマンド（リセット、DTR-OPI 設定、メモリマップ）。`Appli/Application/extflash/mx66uw1g45g/` | BSD-3-Clause（同梱の `LICENSE.txt`） | `mx66uw1g45g.c/.h` は無改変。`mx66uw1g45g_conf.h` は ST のテンプレート（同名で複製して使う前提のファイル）に本機の設定値を書いたもの |
-| RK050HR18 コンポーネントドライバ v1.0.1 | STMicroelectronics | https://github.com/STMicroelectronics/stm32-rk050hr18 | LCD パネル（800x480、LTDC 直結）の解像度と同期タイミングの定義。`Appli/Application/lcd/st/rk050hr18.h` | BSD-3-Clause（入手元リポジトリの `LICENSE.md`。同梱はヘッダ 1 本なので、提出前に LICENSE の写しを置く） | 無改変 |
-| STM32 Utilities Fonts | STMicroelectronics | https://github.com/STMicroelectronics/STM32CubeN6/tree/main/Utilities/Fonts | LCD に描く 17x24 のビットマップフォント。`Appli/Application/lcd/st/font24.c`, `fonts.h` | BSD-3-Clause（入手元の `LICENSE.md`、Copyright 2014(-2019)。提出前に写しを置く） | 無改変 |
+| RK050HR18 コンポーネントドライバ v1.0.1 | STMicroelectronics | https://github.com/STMicroelectronics/stm32-rk050hr18 | LCD パネル（800x480、LTDC 直結）の解像度と同期タイミングの定義。`Appli/Application/lcd/st/rk050hr18.h` | BSD-3-Clause（同梱の `Appli/Application/lcd/st/LICENSE_rk050hr18.md`。入手元の `LICENSE.md` の写し） | 無改変 |
+| STM32 Utilities Fonts | STMicroelectronics | https://github.com/STMicroelectronics/STM32CubeN6/tree/main/Utilities/Fonts | LCD に描く 17x24 のビットマップフォント。`Appli/Application/lcd/st/font24.c`, `fonts.h` | BSD-3-Clause（同梱の `Appli/Application/lcd/st/LICENSE_fonts.md`。入手元の `LICENSE.md` の写し、Copyright 2014(-2019)） | 無改変 |
 | ST Edge AI Core 4.0.1 ランタイム: ll_aton（atonn-v1.1.3-275-g6770925d）、`NetworkRuntime1201_CM55_GCC.a`、`Inc/` のヘッダ、`Devices/STM32N6xx/`（ATON レジスタ定義、mcu_cache） | STMicroelectronics | https://www.st.com/en/development-tools/stedgeai-core.html （インストーラの `C:\ST\STEdgeAI\4.0\Middlewares\ST\AI\`。Npu/ll_aton、Npu/Devices/STM32N6xx、Inc、Lib/GCC/ARMCortexM55） | Neural-ART NPU の推論ランタイム（`Appli/Application/npu/st/`） | SLA0104（同梱の `npu/st/LICENSE.md` = 同ツールの `Middlewares/ST/AI/LICENSE.txt`） | 無改変。同梱しなかったもの: RTOS 用 OSAL（FreeRTOS / ThreadX / Zephyr）とそのテンプレート、HAL_CACHEAXI に依存する `npu_cache.c`（自作の `npu_cache_port.c` で置き換え）、`Inc/` のうちビルドで参照しない 37 本 |
 | 生成済み NPU ネットワーク ESC-10 版（`Appli/Application/npu/model_esc10/network.c/.h`, `stai_network.c/.h`） | STMicroelectronics（ST Edge AI Core の生成物） | `stedgeai generate`（4.0.1）で STM32N6-GettingStarted-Audio v2.3.0 の `yamnet_1024_64x96_tl_qdq_int8.onnx` から生成（`scripts/stedgeai/generate_esc10.sh`） | ESC-10 の 10 クラス（YAMNet 1024 派生）の NPU 実行コード | SLA0104（生成物のヘッダは「コンポーネント直下の LICENSE に従う」＝ランタイムと同じ）。元モデルと重み hex は SLA0044（GettingStarted-Audio） | 無改変。重み hex（3,282,785 B）は同梱せず、[manual.md](manual.md) 4.1 節の手順で取得して外部フラッシュに書く |
 | 生成済み NPU ネットワーク FSD50K 版（`Appli/Application/npu/model_fsd50k/network.c/.h`, `stai_network.c/.h`, `network_weights.c`） | 同上 | `bash scripts/stedgeai/generate_fsd50k.sh`（下の tflite から生成） | FSD50K 5 クラス（YAMNet 256 派生）の NPU 実行コードと重み（AXISRAM4 に置く配列） | SLA0104 | 無改変（`network_weights.c` は生成された raw を `scripts/stedgeai/raw2c.py` で配列にしただけ） |
@@ -70,14 +70,8 @@ CubeMX 生成コードなどに手で足した箇所は 2 節に列挙します�
 
 FSBL（`mtk3bsp2_stm32n657/FSBL/`）は BSP2 に含まれる CubeMX 生成のまま無改変です。
 
-## 3. 提出前に置くもの
-
-- 入手元の LICENSE の写し: ExtMem Manager（SLA0044）、RK050HR18（BSD-3-Clause）、Utilities Fonts（BSD-3-Clause）。HAL・CMSIS・MX66UW1G45G・ST Edge AI ランタイム・tflite は同梱済み
-- 本プロジェクトの新規コードのライセンス全文（`LICENSE`。README の記載は MIT License）
-- 上表の「要確認」: μT-Kernel 3.0 BSP2 の取得したリリースのタグと取得日
-
-## 4. 規則 1.3 への対応
+## 3. 規則 1.3 への対応
 
 - 上記の既存ソフトウェアについて、応募規約に則り著作権などの権利処理を行ったことを、本コンテストの主催者および協力団体に対して保証します。各ライセンスの条件（著作権表示とライセンス文の保持、ST の SLA0044 / SLA0104 が求める ST 製デバイス上での使用とオープンソース条件を課さないこと、ESC-50 の非同梱）に従っています。
-- 主催者が応募プログラムを評価するために必要な既存ソフトウェアは、リポジトリに同梱しているか無償で入手できるものだけで、本コンテストの表彰式終了後 1 週間程度まで利用可能な状態で提供します。同梱しないもの（ESC-10 版の重み hex、ESC-50、PC 側の依存パッケージ、開発ツール）の入手方法は上表のとおりで、FSD50K 版（既定）の評価にはリポジトリと STM32CubeIDE だけが必要です。
-- 本応募プログラムはオープンソースとして公開します。新規作成部分のライセンスは MIT License とし、同梱した既存ソフトウェアはそれぞれのライセンスに従います（[README](../README.md)）。
+- 主催者が応募プログラムを評価するために必要な既存ソフトウェアは、リポジトリに同梱しているか無償で入手できるものだけで、本コンテストの表彰式終了後 1 週間程度まで利用可能な状態で提供します。同梱しないもの（ESC-10 版の重み hex、ESC-50、PC 側の依存パッケージ、開発ツール）の入手方法は上表のとおりです。既定の ESC-10 版の評価にはリポジトリと STM32CubeIDE に加えて重み hex（GitHub で公開されている STM32N6-GettingStarted-Audio に同梱。[manual.md](manual.md) 4.1 節）が必要で、FSD50K 版はリポジトリと STM32CubeIDE だけで動きます。
+- 本応募プログラムはオープンソースとして公開します。新規作成部分のライセンスは MIT License（全文はルートの [LICENSE](../LICENSE)）とし、同梱した既存ソフトウェアはそれぞれのライセンスに従います（[README](../README.md)）。

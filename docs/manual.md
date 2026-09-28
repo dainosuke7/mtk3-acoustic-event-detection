@@ -83,7 +83,7 @@ CubeIDE でのインポート: File > Open Projects from File System で `mtk3bs
    `usermain()` に到達しません
 4. デバッガで一時停止していたら F8（Resume）で続行する
 
-FSD50K 版（既定）の重みは AXISRAM4（0x34270000）に置かれますが、この RAM はリセット直後は電源が切れていて
+FSD50K 版に切り替えたとき（10 節の `AED_MODEL`）、重みは AXISRAM4（0x34270000）に置かれますが、この RAM はリセット直後は電源が切れていて
 （RAMCFG の SRAMSD = 1。入れるのはアプリの `npu_hw_init`）、そのままではデバッガの load が書けず
 "Load failed" になります。そこで同じ起動構成の Startup タブ「Initialization Commands」（load より前に GDB が
 実行する）に、`npu_hw_init` と同じ操作を入れてあります（`.launch` の `org.eclipse.cdt.debug.gdbjtag.core.initCommands`）:
@@ -104,9 +104,8 @@ set {unsigned int}0x52023280 = {unsigned int}0x52023280 & ~0x00100000       # RA
 
 ### 4.1 ESC-10 版のモデル重み（外部フラッシュ）
 
-同梱の既定は FSD50K 版で、重みはアプリの像に含まれる（AXISRAM4 に置かれる）ので追加の書き込みは要りません。
-ESC-10 版（`AED_MODEL` を ESC10 にしたとき。6 節）は重み 3,282,785 B を外部フラッシュ `0x70180000` に
-一度書いておきます。hex はリポジトリに含めていません（ST のライセンス配布物）。取得は次のどちらか:
+同梱の既定は ESC-10 版で、重み 3,282,785 B を外部フラッシュ `0x70180000` に一度書いておきます
+（FSD50K 版に切り替えたときは重みがアプリの像に含まれる＝AXISRAM4 に置かれるので、この書き込みは要りません）。hex はリポジトリに含めていません（ST のライセンス配布物）。取得は次のどちらか:
 
 - `STM32N6-GettingStarted-Audio` v2.3.0 の `Projects/X-CUBE-AI/models/aed_weights.hex`
 - `bash scripts/stedgeai/generate_esc10.sh <STM32N6-GettingStarted-Audio>` の出力 `scripts/stedgeai/st_ai_output_esc10/aed_weights.hex`（内容は同一）
@@ -126,9 +125,9 @@ STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -el <tools/bin>/ExternalLoader/MX6
 | 行 | 意味 |
 |---|---|
 | `[FAULT] vector table installed` / `[TRACE] CYCCNT=OK ...` | フォルト可視化と時間計測の準備 |
-| `CONFIG: A production (INFER_PRIO_INVERT=0 INFER_SLOW_X=1 task_infer pri 15 model=fsd50k)` | この起動の条件。`model=` が載っているモデル |
+| `CONFIG: A production (INFER_PRIO_INVERT=0 INFER_SLOW_X=1 task_infer pri 15 model=esc10)` | この起動の条件。`model=` が載っているモデル |
 | `extflash_init: ret=0` / `npu_hw_init: ret=0` / `tap_ring_init: ret=0` | 外部フラッシュのメモリマップ、NPU の電源・クロック・RIF・キャッシュ、推論用リング |
-| `notify: 4 target classes (Knock Glass Crying_and_sobbing Speech), threshold p>0.70, peak gate -30 dBFS ...` `notify: rel gate ...` `notify: cooldown ...` | 判定の規則（10 節の値がそのまま出る） |
+| `notify: 3 target classes (dog crying_baby sneezing), threshold p>0.70, peak gate -30 dBFS ...` `notify: rel gate ...` `notify: cooldown ...` | 判定の規則（10 節の値がそのまま出る。FSD50K 版なら `4 target classes (Knock Glass Crying_and_sobbing Speech)`） |
 | `npu rt init (ll_aton atonn-v1.1.3-275-..., model ...)` → `aed model:` `aed classes:` `aed input quant:` | NPU ランタイムの起動と、モデル名・クラス表・入力の量子化 |
 | `npu random-input test ...` / `npu logits ...` / `npu selftest ...` | 乱数入力での自己テスト（PC の参照値との比較、10 回の同一性） |
 | `Speak into the onboard mics; ...` と `pt[n]: ... under=0 over=0 late=0 ...` | パススルー開始。ヘッドホンにマイクの音が出る。500 ms ごとの統計 |
@@ -150,12 +149,12 @@ win   20 pos=  307200  -49dBFS [###.................] rms=  113 peak=  510 seam=
 
 | 経路 | 内容 |
 |---|---|
-| LCD | 検出で画面全体がクラス色になり、中央に英字（FSD50K: KNOCK 黄 / GLASS 赤 / CRY 橙 / VOICE 青、ESC-10: DOG 黄 / BABY 橙 / SNEEZE 青）が 3 秒出る。3 秒経つと黒の `READY` に戻る。保持中に別の検出が来れば塗り替えて 3 秒を測り直す。下部の 3 行は履歴 `+MM:SS  KNOCK p=0.86`（起動からの経過時間、新しいものが上。黒地に白）。左上の数字は 1 秒ごとに 0〜9 と変わる生存表示（止まれば表示タスクが動いていない）。1 回の全面描画の時間は UART の `lcd: win ...` 行の `paint=Nus` に出る |
+| LCD | 検出で画面全体がクラス色になり、中央に英字（ESC-10: DOG 黄 / BABY 橙 / SNEEZE 青、FSD50K: KNOCK 黄 / GLASS 赤 / CRY 橙 / VOICE 青）が 3 秒出る。3 秒経つと黒の `READY` に戻る。保持中に別の検出が来れば塗り替えて 3 秒を測り直す。下部の 3 行は履歴 `+MM:SS  KNOCK p=0.86`（起動からの経過時間、新しいものが上。黒地に白）。左上の数字は 1 秒ごとに 0〜9 と変わる生存表示（止まれば表示タスクが動いていない）。1 回の全面描画の時間は UART の `lcd: win ...` 行の `paint=Nus` に出る |
 | LED | 赤（PG10）: 検出で 1 秒点灯。緑（PO1）: 500 ms で点滅し続ける（生存表示） |
 | UART JSON | 検出のたびに 1 行。`{"win":123,"cls":"Knock","p":0.87,"lat_ms":112,"under":0,"over":0,"late":0}`。`win` 窓番号、`cls` クラス、`p` 確率、`lat_ms` 窓がそろってからこの行を出すまで、`under/over/late` 音声の取りこぼしの累計。検出が途切れて unknown になったときだけ `"cls":"unknown"` を 1 行出す |
 
-試し方: 手をたたく・ドアをノックする（FSD50K 版は Knock）・話しかける（Speech。30 秒に 1 回だけ通知）。
-ESC-10 版は犬の鳴き声・赤ちゃんの泣き声・くしゃみの音源を鳴らします。
+試し方: ESC-10 版（既定）は犬の鳴き声・赤ちゃんの泣き声・くしゃみの音源を鳴らします（咳ばらいも sneezing になりやすい）。
+FSD50K 版はドアをノックする（Knock）・話しかける（Speech。30 秒に 1 回だけ通知）。
 
 ## 7. ログの取得
 
@@ -236,7 +235,7 @@ bash scripts/stedgeai/generate_esc10.sh <STM32N6-GettingStarted-Audio>     # ESC
 
 | 設定 | 既定 | 場所 | 意味 |
 |---|---|---|---|
-| `AED_MODEL` | FSD50K（`model_fsd50k/network.c` が無い環境では ESC10） | `Appli/Application/npu/aed_model.h` | モデルの選択。ESC10 にするには `#if __has_include("model_fsd50k/network.c")` の行を `#if 0` にする（か、その上に `#define AED_MODEL AED_MODEL_ESC10`）。切り替えたら必ず Clean してからビルド（CubeIDE: Project > Clean。コマンドなら CubeIDE 同梱の make（`C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.make.*\tools\bin`）を PATH に通して `make -C mtk3bsp2_stm32n657/Appli/Debug clean`。Debug/ に別設定の .o が残るため） |
+| `AED_MODEL` | ESC10 | `Appli/Application/npu/aed_model.h` | モデルの選択。FSD50K にするには `#define AED_MODEL AED_MODEL_ESC10` の行を `AED_MODEL_FSD50K` に書き換える（`-DAED_MODEL=AED_MODEL_FSD50K` でも可）。切り替えたら必ず Clean してからビルド（CubeIDE: Project > Clean。コマンドなら CubeIDE 同梱の make（`C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.make.*\tools\bin`）を PATH に通して `make -C mtk3bsp2_stm32n657/Appli/Debug clean`。Debug/ に別設定の .o が残るため） |
 | `AED_OOD_THR` | 0.7 | `Appli/Application/aed/notify.h` | 1 位の確率がこれを超えたときだけクラスを名乗る |
 | `NOTIFY_GATE_PEAK_DBFS` | −30 | 同上 | 窓のピークがこの dBFS 未満なら通知しない（−99 で切） |
 | `NOTIFY_FLOOR_WINDOWS` / `NOTIFY_FLOOR_PERCENTILE` / `NOTIFY_GATE_REL_DB` | 60 / 10 / 10 | 同上 | 直近 60 窓の rms の 10 パーセンタイルを暗騒音とし、それ +10 dB 未満なら通知しない |

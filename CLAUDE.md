@@ -28,6 +28,7 @@ Appli 単体の構成で起動すると usermain() に到達しない
 直前に FSBL をビルドしておく
 ログ: powershell scripts/log.ps1 → logs/uart_<日時>.log（走るたびに別ファイル。固定名に追記すると試験の行が混ざるため。名前を決めたいときや追記したいときは -Out で渡す）。-Timestamp で各行の先頭に PC の時計 HH:mm:ss.fff を付ける（aed_play_test.py のログと同じ形式で、対照試験の突き合わせに使う。既定はオフで出力は従来どおり。時刻はその行の先頭が届いた読み取りのもの。ReadExisting は行の途中で返るので、改行が来るまで溜めてから1行として書いている）。SerialPort の Encoding は UTF-8 にしている（既定は ASCII で、ボードが出す日本語＝READY の区切りが ? に化ける。ASCII は UTF-8 の一部なので英数字だけの出力は変わらない）
 COM ポートは1プロセスしか開けない。他のターミナルを閉じてから
+提出用に使ったログは docs/logs/ に写してある（docs/logs/README.md が各報告の数字とログの行・スクリプトの対応。.gitignore の /logs/ はルートの logs/ だけを除外する）
 重みの書き込み（外部フラッシュ 0x70180000、署名不要）:
   STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -el <ExternalLoader>/MX66UW1G45G_STM32N6570-DK.stldr -hardRst -w aed_weights.hex
 
@@ -88,7 +89,7 @@ PCM リング（pcm_fifo）は SPSC。消費者を増やせない。推論用は
 フォルト可視化（Application/fault/）: 起動時にベクタテーブルを RAM にコピーし、未実装 IRQ 180本とフォルト例外5本を差し替え。 CFSR/BFAR/スタック上の PC を UART 直叩きで出してから停止。デバッガ接続時は __BKPT で止まるので F8 で続行
 FAULT_TEST（fault.h）: 0=無効 / 1=BusFault / 2=ゼロ除算 / 3=未実装IRQ / 4=STKOF。コミット時は必ず 0
 トレース（Application/trace/）: TRACE(id,arg) で (CYCCNT, id, arg) を記録。trace_start(ms) で区間記録し、終了後に CSV ダンプ。 ダンプ中は trace_muted() で他の出力を抑制
-テスト用スイッチ: AUDIO_PRIO_TEST（音声タスクを最低優先度にして負荷タスクを回す）、FLASH_PROBE（0x70180000 読み出し確認）。 コミット時は 0 に戻す。 NPU_RISAF_DUMP（npu_hw.c、RISAF の状態表示。読むだけ）と NPU_PT_TEST（infer_task.c、パススルー中に乱数入力の推論10回。タスク7 の予行）はタスク9 で本番の推論が入ったので 0。 PREPROC_TEST（infer_task.c、前処理を PC と突き合わせる。タスク8）は 1、AED_USE_TEST_CLIPS（npu_selftest.c、30 本で NPU を判定）は ROM の都合で 0。 LCD_DIAG（lcd.c、LTDC / RIF / PWR / GPIO のレジスタを表示。読むだけ）はコミット時は 0。 INFER_PRIO_INVERT / INFER_SLOW_X（infer_task.h、対照実験の条件 B / D。既定 0 / 1 ＝本番 A。コミット時は既定に戻す。下の「対照実験のスイッチ」を参照） AED_MODEL（npu/aed_model.h、モデルの切替。AED_MODEL_ESC10 / AED_MODEL_FSD50K。既定は FSD50K。model_fsd50k/network.c が無い環境では __has_include で ESC10 に倒れる）
+テスト用スイッチ: AUDIO_PRIO_TEST（音声タスクを最低優先度にして負荷タスクを回す）、FLASH_PROBE（0x70180000 読み出し確認）。 コミット時は 0 に戻す。 NPU_RISAF_DUMP（npu_hw.c、RISAF の状態表示。読むだけ）と NPU_PT_TEST（infer_task.c、パススルー中に乱数入力の推論10回。タスク7 の予行）はタスク9 で本番の推論が入ったので 0。 PREPROC_TEST（infer_task.c、前処理を PC と突き合わせる。タスク8）は 1、AED_USE_TEST_CLIPS（npu_selftest.c、30 本で NPU を判定）は ROM の都合で 0。 LCD_DIAG（lcd.c、LTDC / RIF / PWR / GPIO のレジスタを表示。読むだけ）はコミット時は 0。 INFER_PRIO_INVERT / INFER_SLOW_X（infer_task.h、対照実験の条件 B / D。既定 0 / 1 ＝本番 A。コミット時は既定に戻す。下の「対照実験のスイッチ」を参照） AED_MODEL（npu/aed_model.h、モデルの切替。AED_MODEL_ESC10 / AED_MODEL_FSD50K。既定は ESC10（5-3 で固定。FSD50K にするには aed_model.h の #define を AED_MODEL_FSD50K に書き換えて make clean → ビルド。理由は README「FSD50K 版について」＝ without_unknown_class 版は生活音の 9/10 を Glass/Knock として通知し 250 件/時、ESC10 は 3.5 件/時））
 既知の罠
 tm_printf はカーネル起動前（knl_start_mtkernel より前）に使えない。 起動前の初期化関数は Error_Handler() を呼ばず、結果を変数に記録してカーネル起動まで到達させる
 FSBL がペリフェラルを触った状態でアプリが起動する。 HAL_xxx_Init が HAL_ERROR を返したら __HAL_RCC_xxx_FORCE_RESET()/RELEASE_RESET() で戻してから初期化（MDF1 で発生。XSPI2 は最初からリセットしてから初期化している）
@@ -196,7 +197,8 @@ CubeIDE を開けないまま新しいフォルダ（例 Application/aed/）を 
 Git
 コミットメッセージは日本語。1行目は Conventional Commits（feat:, fix:, refactor:, docs: など、スコープは audio/fault/trace/npu 等）、空行、なぜ変えたか
 論理単位でステージする
-基準点にタグ: phase0-baseline（10分連続 under/over/late=0、応答1〜2μs、CPU占有0.30%）
+基準点にタグ: phase0-baseline（10分連続 under/over/late=0、応答1〜2μs、CPU占有0.30%）、v3（2026-09-28、main。FSD50K 版が実機動作、既定は ESC10、LCD 背景色と履歴）
+新規部分のライセンスは MIT（ルートの LICENSE。README「オープンソースとしての公開」と docs/third_party.md 3 節）
 このファイルについて
 
 開発中の制約メモ（Claude Code 向け）。人間向けの説明は README.md を参照。 記述が実態と食い違ったら、コードではなくこのファイルを直す。

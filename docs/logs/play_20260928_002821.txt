@@ -1,0 +1,53 @@
+# aed_play_test start 2026-09-28 00:28:21
+# 5.0s silence 60.0s / 65.0s clips 10 x 5s every 15.0s / 215.0s manual 12 x every 15.0s / end 395.0s
+# clips from ..\ref\ESC-50 (ESC-10, fold 5), peak normalized to -3.0dBFS, model esc10
+# SYNC/PHASE/CLIP/MANUAL。時刻は 開始からの経過秒 と PC の時計 (HH:MM:SS.mmm)
+#  1 dog             5-203128-A-0.wav     rms= -17.5dBFS gain=  -2.2dB
+#  2 crying_baby     5-151085-A-20.wav    rms= -20.6dBFS gain=  -1.5dB
+#  3 crackling_fire  5-186924-A-12.wav    rms=  -5.6dBFS gain=  -3.0dB
+#  4 sneezing        5-187979-A-21.wav    rms= -27.3dBFS gain=  -2.7dB
+#  5 clock_tick      5-201194-A-38.wav    rms= -37.2dBFS gain=  +4.9dB
+#  6 dog             5-208030-A-0.wav     rms= -10.4dBFS gain=  -2.6dB
+#  7 crying_baby     5-198411-B-20.wav    rms= -22.0dBFS gain=  +1.2dB
+#  8 crackling_fire  5-189212-A-12.wav    rms= -27.2dBFS gain=  -2.2dB
+#  9 sneezing        5-194533-A-21.wav    rms= -27.4dBFS gain=  -2.3dB
+# 10 clock_tick      5-208624-A-38.wav    rms= -36.8dBFS gain=  +9.7dB
+# manual  1 knock (ドアをノックする (2〜3回))
+# manual  2 handclap (手を1回たたく)
+# manual  3 paper (紙をくしゃくしゃにする)
+# manual  4 cough (咳ばらいをする)
+# manual  5 chair (椅子を引く)
+# manual  6 mug (マグを机に置く)
+# manual  7 knock (ドアをノックする (2〜3回))
+# manual  8 handclap (手を1回たたく)
+# manual  9 paper (紙をくしゃくしゃにする)
+# manual 10 cough (咳ばらいをする)
+# manual 11 chair (椅子を引く)
+# manual 12 mug (マグを机に置く)
+[+0.0s 00:28:21.646]    SYNC clap
+[+5.0s 00:28:26.642]    PHASE silence
+[+65.0s 00:29:26.649]   PHASE clips
+[+65.0s 00:29:26.662]   CLIP dog 5-203128-A-0.wav rms=-17.5dBFS gain=-2.2dB
+[+80.0s 00:29:41.634]   CLIP crying_baby 5-151085-A-20.wav rms=-20.6dBFS gain=-1.5dB
+[+95.0s 00:29:56.636]   CLIP crackling_fire 5-186924-A-12.wav rms=-5.6dBFS gain=-3.0dB
+[+110.0s 00:30:11.646]  CLIP sneezing 5-187979-A-21.wav rms=-27.3dBFS gain=-2.7dB
+[+125.0s 00:30:26.645]  CLIP clock_tick 5-201194-A-38.wav rms=-37.2dBFS gain=+4.9dB
+[+140.0s 00:30:41.640]  CLIP dog 5-208030-A-0.wav rms=-10.4dBFS gain=-2.6dB
+[+155.0s 00:30:56.641]  CLIP crying_baby 5-198411-B-20.wav rms=-22.0dBFS gain=+1.2dB
+[+170.0s 00:31:11.644]  CLIP crackling_fire 5-189212-A-12.wav rms=-27.2dBFS gain=-2.2dB
+[+185.0s 00:31:26.647]  CLIP sneezing 5-194533-A-21.wav rms=-27.4dBFS gain=-2.3dB
+[+200.0s 00:31:41.644]  CLIP clock_tick 5-208624-A-38.wav rms=-36.8dBFS gain=+9.7dB
+[+215.0s 00:31:56.637]  PHASE manual
+[+215.0s 00:31:56.637]  MANUAL knock
+[+230.0s 00:32:11.643]  MANUAL handclap
+[+245.0s 00:32:26.643]  MANUAL paper
+[+260.0s 00:32:41.644]  MANUAL cough
+[+275.0s 00:32:56.633]  MANUAL chair
+[+290.0s 00:33:11.635]  MANUAL mug
+[+305.0s 00:33:26.641]  MANUAL knock
+[+320.0s 00:33:41.632]  MANUAL handclap
+[+335.0s 00:33:56.638]  MANUAL paper
+[+350.0s 00:34:11.633]  MANUAL cough
+[+365.0s 00:34:26.636]  MANUAL chair
+[+380.0s 00:34:41.638]  MANUAL mug
+# aed_play_test end (+395.0s)

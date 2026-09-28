@@ -17,20 +17,17 @@
  * 外してある。2 つのモデルの network.c は同じシンボルを定義するので同時には載せられない)。
  * ヘッダも AED_MODEL_STAI_NETWORK_H / AED_MODEL_TEST_INPUT_H / AED_MODEL_REF_CLIPS_H を #include する (npu/ からの相対パス)。
  *
- * 既定は FSD50K。ただし model_fsd50k/network.c がまだ無い (生成には stedgeai が要る。model_fsd50k/README.md)
- * 間は ESC10 に倒す (ビルドが通らないより、動く方を既定にしておく)。生成すれば自動で FSD50K になる。
+ * 既定は ESC10 (5-3 で固定)。FSD50K 版は実機で動くが、without_unknown_class 版には「その他」のクラスが無く、
+ * 屋内の生活音の大半を Glass / Knock として通知する (朝の生活空間 34 分で 250 件/時。ESC10 は 3.5 件/時。
+ * README の「FSD50K 版について」と docs/logs/README.md)。FSD50K にするときは下の #define を AED_MODEL_FSD50K に
+ * 書き換え (か -DAED_MODEL=AED_MODEL_FSD50K)、必ず make clean してからビルドする (Debug/ に別のモデルの .o が残る)。
  * どちらが載ったかは起動ログの "CONFIG:" 行の model= と "aed model:" 行で分かる。
- * 明示するときは -DAED_MODEL=AED_MODEL_ESC10 (か下の #define を書き換える)
  */
 #define AED_MODEL_ESC10		(1)
 #define AED_MODEL_FSD50K	(2)
 
 #ifndef AED_MODEL
-#if __has_include("model_fsd50k/network.c")
-#define AED_MODEL		AED_MODEL_FSD50K
-#else
 #define AED_MODEL		AED_MODEL_ESC10
-#endif
 #endif
 
 #if AED_MODEL == AED_MODEL_ESC10
