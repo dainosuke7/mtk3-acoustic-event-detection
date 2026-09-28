@@ -31,6 +31,12 @@
 #define AED_DISP_NAMES		{ "CRY", "GLASS", "GUN", "KNOCK", "VOICE" }
 
 /*
+ * 通知のときの画面の背景色 (lcd.h の CLUT 番号。並びは上と同じ。タスク5-4)。
+ * KNOCK 黄 / GLASS 赤 / CRY 橙 / VOICE 青。GUN は通知しないので黒
+ */
+#define AED_DISP_COLORS		{ LCD_ORANGE, LCD_RED, LCD_BLACK, LCD_YELLOW, LCD_BLUE }
+
+/*
  * 通知するクラス (モデルの出力順の番号): Knock 3 / Glass 1 / Crying_and_sobbing 0 / Speech 4。
  * Gunshot_and_gunfire (2) は屋内の知らせる音ではないので対象外 (offlist に数える)。
  * Speech は「続いている間は 1 回」: 通知してから NOTIFY_COOLDOWN_S 秒 (30) は同じクラスを通知しない

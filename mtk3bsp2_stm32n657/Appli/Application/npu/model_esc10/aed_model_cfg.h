@@ -27,6 +27,13 @@
 				  "HELI", "RAIN", "ROOSTER", "WAVES", "SNEEZE" }
 
 /*
+ * 通知のときの画面の背景色 (lcd.h の CLUT 番号。並びは上と同じ。タスク5-4)。
+ * DOG 黄 / BABY 橙 / SNEEZE 青。通知しないクラスは黒 (出ることは無いが表は全クラス分)
+ */
+#define AED_DISP_COLORS		{ LCD_BLACK, LCD_BLACK, LCD_BLACK, LCD_ORANGE, LCD_YELLOW, \
+				  LCD_BLACK, LCD_BLACK, LCD_BLACK, LCD_BLACK, LCD_BLUE }
+
+/*
  * 通知するクラス番号 (モデルの出力順)。屋内で知らせたい音に絞る。
  * ここに無いクラスが1位になったときは LED も JSON も出さない。推論は毎窓続けるので、
  * 落とした数は notify_stats() の offlist に出る (誤報の内訳はこの数で見る)。

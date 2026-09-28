@@ -174,6 +174,7 @@ LCD（Phase 2 タスク2-1。Application/lcd/）
 検出の表示（タスク2-2）
   受け渡しは lcd_task.c のメッセージバッファ（8件）。notify.c が通知を出すところ（LED を点けるのと同じ箇所）から lcd_post(cls, p100, win, NOW()) を呼ぶ。tk_snd_mbf は TMO_POL で、いっぱいなら捨てて数える（JSON と同じ流儀。推論タスクを表示で待たせない）。判定そのもの（notify_decide と通知するかの条件）は変えていない
   画面は中央の帯（y=192、96行）にクラス名を Font24 の4倍（68x96 画素）で中央寄せ。英字はモデルの aed_model_cfg.h の AED_DISP_NAMES（lcd_task.c の disp_name はそれ。FSD50K は Knock→KNOCK / Glass→GLASS / Crying_and_sobbing→CRY / Speech→VOICE / Gunshot_and_gunfire→GUN。ESC10 は dog→DOG、crying_baby→BABY、sneezing→SNEEZE、crackling_fire→FIRE）。待機は "READY"
+  5-4（2026-09-28）: 通知で画面全体をクラス色（aed_model_cfg.h の AED_DISP_COLORS。lcd.h の CLUT 番号 2 赤 / 3 黄 / 4 橙 / 5 青。FSD50K: KNOCK 黄・GLASS 赤・CRY 橙・VOICE 青、ESC10: DOG 黄・BABY 橙・SNEEZE 青）に塗り、文字色は lcd_contrast_color（CLUT の輝度で黒か白）。保持が終わったら黒の READY に戻す。下部（y=328、48 行 x 3）に履歴 3 行 "+MM:SS  KNOCK p=0.86"（tk_get_otm の稼働時間、新しいものが上、黒地に白）。全面の塗りは lcd_fill_rows(0, 480) + lcd_flush_rows(0, 480) で、1 回の時間は lcd 行の paint に出る（disp max にも含まれる）。生存表示は背景色の上に描く。
   検出から LCD_HOLD_MS（3秒）は保持し、その間に別のクラスが来たら上書きする。3秒経ったら待機表示に戻す。unknown は送らない（画面は時間で戻す方式なので、送ると3秒より早く消えてしまう）
   描くのは書き換える帯だけで全画面は消さない。clean も その帯だけ（1行 800B が 32B の倍数なので帯の境界＝キャッシュラインの境界）
   生存表示は左上（y=8、24行）に1秒ごとに 0〜9 が変わる数字。止まると同じ数字のままになる
