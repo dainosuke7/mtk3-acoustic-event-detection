@@ -198,7 +198,7 @@ Git
 コミットメッセージは日本語。1行目は Conventional Commits（feat:, fix:, refactor:, docs: など、スコープは audio/fault/trace/npu 等）、空行、なぜ変えたか
 論理単位でステージする
 基準点にタグ: phase0-baseline（10分連続 under/over/late=0、応答1〜2μs、CPU占有0.30%）、v3（2026-09-28、main。FSD50K 版が実機動作、既定は ESC10、LCD 背景色と履歴）
-新規部分のライセンスは MIT（ルートの LICENSE。README「オープンソースとしての公開」と docs/third_party.md 3 節）
+新規部分のライセンスは Apache-2.0（ルートの LICENSE と NOTICE。README「オープンソースとしての公開」と docs/third_party.md 3 節）
 このファイルについて
 
 開発中の制約メモ（Claude Code 向け）。人間向けの説明は README.md を参照。 記述が実態と食い違ったら、コードではなくこのファイルを直す。

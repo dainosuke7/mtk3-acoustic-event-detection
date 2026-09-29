@@ -1,8 +1,10 @@
 # 手順書（ビルド・実行・評価）
 
-屋内音お知らせ機（STM32N6570-DK + μT-Kernel 3.0）を、クローン直後の状態から動かして評価するまでの手順です。
+音響イベント検出基盤（STM32N6570-DK + μT-Kernel 3.0）を、クローン直後の状態から動かして評価するまでの手順です。
 上から順に実行すればビルドと起動ができます。コマンドはすべてこのリポジトリに実在するものです。
 既存ソフトウェアの一覧は [third_party.md](third_party.md)、設計の詳細は [../CLAUDE.md](../CLAUDE.md)（開発者向けメモ）。
+
+審査用に要点をまとめた手順書は [手順書_音響イベント検出基盤.docx](手順書_音響イベント検出基盤.docx)（PDF 版あり）。
 
 ## 1. 必要なもの
 
@@ -15,6 +17,7 @@
 | STM32CubeProgrammer | 2.23.0（CubeIDE 2.2.0 に同梱。`C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_*\tools\bin`） | ESC-10 版のモデル重みを外部フラッシュに書くときだけ |
 | ST Edge AI Core | 4.0.1（`C:\ST\STEdgeAI\4.0\`） | NPU 向けモデルを生成し直すときだけ（生成物は同梱済み） |
 | uv | 0.12 系（Python 3.12 は uv が用意する） | PC 側スクリプト（ログ集計、参照値の生成、対照試験） |
+| STM32N6-GettingStarted-Audio | v2.3.0（https://github.com/STMicroelectronics/STM32N6-GettingStarted-Audio） | ESC-10 版の重み hex の入手（4.1 節）と、参照値の生成（9.3 節） |
 | ESC-50 | `git clone https://github.com/karolpiczak/ESC-50.git`（`meta/` と `audio/`） | 対照試験 1-Ex の再現と、前処理の参照ヘッダの生成だけ |
 | ヘッドホン | 任意 | パススルー音のモニタ（CN15） |
 
@@ -56,8 +59,8 @@ PDM マイク U13/U14 ──MDF1 (16 kHz)──GPDMA1 ch0──▶ task_pcm ─�
 ## 3. ビルド
 
 ```bash
-git clone <このリポジトリ>
-cd tron
+git clone https://github.com/dainosuke7/mtk3-acoustic-event-detection
+cd mtk3-acoustic-event-detection
 bash scripts/build.sh
 ```
 
@@ -108,6 +111,9 @@ set {unsigned int}0x52023280 = {unsigned int}0x52023280 & ~0x00100000       # RA
 （FSD50K 版に切り替えたときは重みがアプリの像に含まれる＝AXISRAM4 に置かれるので、この書き込みは要りません）。hex はリポジトリに含めていません（ST のライセンス配布物）。取得は次のどちらか:
 
 - `STM32N6-GettingStarted-Audio` v2.3.0 の `Projects/X-CUBE-AI/models/aed_weights.hex`
+  ```bash
+  curl -L -o aed_weights.hex https://raw.githubusercontent.com/STMicroelectronics/STM32N6-GettingStarted-Audio/v2.3.0/Projects/X-CUBE-AI/models/aed_weights.hex
+  ```
 - `bash scripts/stedgeai/generate_esc10.sh <STM32N6-GettingStarted-Audio>` の出力 `scripts/stedgeai/st_ai_output_esc10/aed_weights.hex`（内容は同一）
 
 ```bash
