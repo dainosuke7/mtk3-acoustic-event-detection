@@ -71,20 +71,21 @@ cd mtk3-acoustic-event-detection
 
 使うのは Debug 構成だけです（Release 構成には μT-Kernel と NPU ランタイムのインクルードパス・ライブラリが入っていないので対象外）。
 
-1. STM32CubeIDE 2.2.0 で File > Import > General > Existing Projects into Workspace を開く
-2. Select root directory に、clone した中の `mtk3bsp2_stm32n657` フォルダを指定する。Options の
-   **Search for nested projects** にチェックを入れ、**Copy projects into workspace** は外す
-   （コピーすると `../../Drivers` などの相対パスが切れる）
-3. 一覧に出る 3 つのプロジェクト（`mtk3bsp2_stm32n657`、`mtk3bsp2_stm32n657_FSBL`、`mtk3bsp2_stm32n657_Appli`）を
-   すべて選んで Finish
-4. `mtk3bsp2_stm32n657_FSBL`、`mtk3bsp2_stm32n657_Appli` の順に、Debug 構成でビルドする
-   （構成は Project > Build Configurations > Set Active > Debug、ビルドは Project > Build Project）
+1. STM32CubeIDE 2.2.0 で File > Open Projects from File System を開き、Import source に clone した中の
+   `mtk3bsp2_stm32n657` フォルダを選ぶ
+2. 一覧に出る 3 つのプロジェクト（`mtk3bsp2_stm32n657`、`mtk3bsp2_stm32n657_FSBL`、`mtk3bsp2_stm32n657_Appli`）を
+   すべてチェックして Finish。3 つとも開くのは、`mtk3bsp2_stm32n657` が CubeMX の設定（`mtk3bsp2_stm32n657.ioc`）を
+   持つ親プロジェクトで、FSBL と Appli がその中に入れ子になった 1 組の構成だからです（親フォルダから開けば 3 つが
+   元の場所のまま取り込まれ、`../../Drivers` などの相対パスも開発時と同じに通る）
+3. 初回のビルドは CubeIDE で行う。4 節の起動構成 `mtk3bsp2_stm32n657_FSBL Debug` を起動すれば、FSBL と Appli の
+   2 つともビルドされる（Startup タブの loadList で両方にビルドが付いている）。ビルドだけするときは FSBL、Appli の順に
+   Project > Build Project（構成は Project > Build Configurations > Set Active > Debug）
 
 `Debug/`（makefile・`objects.list`・成果物）はリポジトリに入っていません。CubeIDE がビルドのときに各自の環境のパスで作ります。
 
-コマンドでビルドする場合は、上の 4 まで済ませて（CubeIDE で一度ビルドして `Debug/` の makefile と `objects.list` を
-作ってから）、次を実行します。`scripts/build.sh` は CubeIDE が `C:\ST\STM32CubeIDE_2.2.0` にある前提で、同梱の
-コンパイラと make を使い、FSBL と Appli の Debug をビルドします。
+2 回目以降は、コマンドでもビルドできます（初回に CubeIDE が `Debug/` の makefile と `objects.list` を作ったあと）。
+`scripts/build.sh` は CubeIDE が `C:\ST\STM32CubeIDE_2.2.0` にある前提で、同梱のコンパイラと make を使い、
+FSBL と Appli の Debug をビルドします。
 
 ```bash
 bash scripts/build.sh
