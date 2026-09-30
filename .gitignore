@@ -4,8 +4,10 @@
 **/.settings/com.st.stm32cube.ide.mcu.sfrview.prefs
 **/.settings/language.settings.xml
 
-# ビルド生成物 (makefile/sources.mk/subdir.mk等のmk系はscripts/build.shが
-# 依存するため追跡を維持し、拡張子ベースでビルド成果物のみ除外する)
+# ビルド生成物。Debug/ は CubeIDE が生成する makefile 一式で、その環境の絶対パスが入るので追跡しない
+# (clone 直後は CubeIDE で一度ビルドして makefile と objects.list を作ってから scripts/build.sh を使う。docs/manual.md 3.2 節)
+mtk3bsp2_stm32n657/Appli/Debug/
+mtk3bsp2_stm32n657/FSBL/Debug/
 *.o
 *.d
 *.su

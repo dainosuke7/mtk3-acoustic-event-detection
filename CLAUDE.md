@@ -193,8 +193,9 @@ NPU ランタイムの定義・インクルードパス・ライブラリは .cp
 .cproject を CubeIDE の外で書き換えたら、CubeIDE でプロジェクトを Refresh（F5）してからビルドし、Debug/ の mk を作り直させる（scripts/build.sh は既存の mk を使うだけで .cproject を読まない）
 Application/ 配下に新規ファイル・フォルダを作ったら CubeIDE でプロジェクトを Refresh（F5）
 Debug/ 配下の mk 系は CubeIDE が生成する。手動編集しない。ビルド対象の追加・除外は GUI で行い .cproject に永続化する
+Appli/Debug/・FSBL/Debug/ は git 管理外（2026-09-30、.gitignore）。CubeIDE が生成する mk にその環境の絶対パス（C:/Users/.../Appli/mtk3_bsp2 など）とリンカスクリプトのパスが入り、objects.list はもともと管理外なので、clone した先では使えなかったため。clone 直後は CubeIDE で一度ビルドして mk と objects.list を作ってから scripts/build.sh を使う（docs/manual.md 3.2 節）。下の「Debug/ の4か所」を手で足す話は手元の Debug/ だけの変更になる
 Drivers/ に HAL のファイルを足したときも Debug/Drivers/STM32N6xx_HAL_Driver/subdir.mk に4か所（C_SRCS・OBJS・C_DEPS・個別ルール2行と clean）と objects.list が要る。LTDC を足したときは既存の xspi の行を雛形にした
-CubeIDE を開けないまま新しいフォルダ（例 Application/aed/）を scripts/build.sh でビルドするには Debug/ の4か所が要る: sources.mk の SUBDIRS、makefile の -include <dir>/subdir.mk、objects.list（リンクは OBJS ではなくこの静的な一覧を使う。*.list なので git 管理外＝手元だけの変更）、<dir>/subdir.mk（既存フォルダのものをコピーしてファイル名を差し替える。行末は CRLF だが継続行とレシピ行だけ LF）。次に CubeIDE で F5 すれば同じ内容が作り直される
+CubeIDE を開けないまま新しいフォルダ（例 Application/aed/）を scripts/build.sh でビルドするには Debug/ の4か所が要る: sources.mk の SUBDIRS、makefile の -include <dir>/subdir.mk、objects.list（リンクは OBJS ではなくこの静的な一覧を使う）、<dir>/subdir.mk（既存フォルダのものをコピーしてファイル名を差し替える。行末は CRLF だが継続行とレシピ行だけ LF）。次に CubeIDE で F5 すれば同じ内容が作り直される
 Git
 コミットメッセージは日本語。1行目は Conventional Commits（feat:, fix:, refactor:, docs: など、スコープは audio/fault/trace/npu 等）、空行、なぜ変えたか
 論理単位でステージする
