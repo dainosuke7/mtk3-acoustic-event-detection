@@ -39,9 +39,9 @@ PDM マイク ──MDF1 (16 kHz)──GPDMA──▶ task_pcm (優先度 5) ─
 
 ## 使い方（要約）
 
-1. STM32CubeIDE 2.2.0 でプロジェクト `mtk3bsp2_stm32n657/FSBL` と `mtk3bsp2_stm32n657/Appli` を開く
-2. `bash scripts/build.sh` でビルド
-3. ESC-10 版のモデル重み（hex、ST 配布）を外部フラッシュに一度書く（[docs/manual.md](docs/manual.md) 4.1 節）
+1. STM32CubeIDE 2.2.0 の File > Import > Existing Projects into Workspace で `mtk3bsp2_stm32n657` を指定し、3 つのプロジェクトを取り込む（[docs/manual.md](docs/manual.md) 3.2 節）
+2. CubeIDE で FSBL と Appli を Debug 構成でビルド（一度ビルドして makefile ができた後は `bash scripts/build.sh` でもよい）
+3. ESC-10 版のモデル重み（hex、ST 配布）を外部フラッシュに一度書く（[docs/manual.md](docs/manual.md) 3.3 節）
 4. SW1（BOOT1）を 1-3 側にし、起動構成 `mtk3bsp2_stm32n657_FSBL Debug` でデバッガから実行
 5. `powershell -ExecutionPolicy Bypass -File scripts/log.ps1` で UART ログを取り、`READY` の後の JSON 行と LCD を見る
 

@@ -17,7 +17,7 @@
 | STM32CubeProgrammer | 2.23.0（CubeIDE 2.2.0 に同梱。`C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_*\tools\bin`） | ESC-10 版のモデル重みを外部フラッシュに書くときだけ |
 | ST Edge AI Core | 4.0.1（`C:\ST\STEdgeAI\4.0\`） | NPU 向けモデルを生成し直すときだけ（生成物は同梱済み） |
 | uv | 0.12 系（Python 3.12 は uv が用意する） | PC 側スクリプト（ログ集計、参照値の生成、対照試験） |
-| STM32N6-GettingStarted-Audio | v2.3.0（https://github.com/STMicroelectronics/STM32N6-GettingStarted-Audio） | ESC-10 版の重み hex の入手（4.1 節）と、参照値の生成（9.3 節） |
+| STM32N6-GettingStarted-Audio | v2.3.0（https://github.com/STMicroelectronics/STM32N6-GettingStarted-Audio） | ESC-10 版の重み hex の入手（3.3 節）と、参照値の生成（9.3 節） |
 | ESC-50 | `git clone https://github.com/karolpiczak/ESC-50.git`（`meta/` と `audio/`） | 対照試験 1-Ex の再現と、前処理の参照ヘッダの生成だけ |
 | ヘッドホン | 任意 | パススルー音のモニタ（CN15） |
 
@@ -56,21 +56,74 @@ PDM マイク U13/U14 ──MDF1 (16 kHz)──GPDMA1 ch0──▶ task_pcm ─�
 | — | 周期ハンドラ | HAL_IncTick の代行（10 ms）、レート表示（1000 ms） | — | — |
 | — | アラームハンドラ | 赤 LED の消灯（点灯から 1 秒） | — | — |
 
-## 3. ビルド
+## 3. 取得・ビルド・重みの書き込み
+
+動作を確認したのは STM32CubeIDE 2.2.0（Windows 11）です。この節のコマンドはすべて Git Bash（Git for Windows）で実行します。
+
+### 3.1 取得
 
 ```bash
 git clone https://github.com/dainosuke7/mtk3-acoustic-event-detection
 cd mtk3-acoustic-event-detection
+```
+
+### 3.2 ビルド
+
+使うのは Debug 構成だけです（Release 構成には μT-Kernel と NPU ランタイムのインクルードパス・ライブラリが入っていないので対象外）。
+
+1. STM32CubeIDE 2.2.0 で File > Import > General > Existing Projects into Workspace を開く
+2. Select root directory に、clone した中の `mtk3bsp2_stm32n657` フォルダを指定する。Options の
+   **Search for nested projects** にチェックを入れ、**Copy projects into workspace** は外す
+   （コピーすると `../../Drivers` などの相対パスが切れる）
+3. 一覧に出る 3 つのプロジェクト（`mtk3bsp2_stm32n657`、`mtk3bsp2_stm32n657_FSBL`、`mtk3bsp2_stm32n657_Appli`）を
+   すべて選んで Finish
+4. `mtk3bsp2_stm32n657_FSBL`、`mtk3bsp2_stm32n657_Appli` の順に、Debug 構成でビルドする
+   （構成は Project > Build Configurations > Set Active > Debug、ビルドは Project > Build Project）
+
+`Debug/`（makefile・`objects.list`・成果物）はリポジトリに入っていません。CubeIDE がビルドのときに各自の環境のパスで作ります。
+
+コマンドでビルドする場合は、上の 4 まで済ませて（CubeIDE で一度ビルドして `Debug/` の makefile と `objects.list` を
+作ってから）、次を実行します。`scripts/build.sh` は CubeIDE が `C:\ST\STM32CubeIDE_2.2.0` にある前提で、同梱の
+コンパイラと make を使い、FSBL と Appli の Debug をビルドします。
+
+```bash
 bash scripts/build.sh
 ```
 
-FSBL と Appli の両方をビルドします（CubeIDE の GUI からビルドしても同じ）。
-ビルド設定は CubeIDE が生成した `mtk3bsp2_stm32n657/Appli/Debug/` の makefile を使うので、CubeIDE で
-プロジェクトを開いてから実行してください（初回は CubeIDE でプロジェクトを Refresh（F5）してビルドすると
-makefile が作り直されます）。
+`scripts/build.sh` は `Debug/` にある makefile を使うだけで `.cproject` を読みません。設定を変えたときや
+ファイルを足したときは、CubeIDE でもう一度ビルドして makefile を作り直してから使ってください。
 
-CubeIDE でのインポート: File > Open Projects from File System で `mtk3bsp2_stm32n657/FSBL` と
-`mtk3bsp2_stm32n657/Appli` の 2 つを開きます。
+### 3.3 ESC-10 版の重みを外部フラッシュに書く（最初の 1 回だけ）
+
+既定の ESC-10 版は、重み（3,282,785 B）を外部フラッシュの `0x70180000` から読むので、一度書いておきます
+（FSD50K 版に切り替えたときは重みがアプリの像に含まれる＝AXISRAM4 に置かれるので、この書き込みは要りません）。
+hex はリポジトリに含めていません（ST のライセンス配布物）。
+
+1. hex を取得する。`STM32N6-GettingStarted-Audio` v2.3.0 の `Projects/X-CUBE-AI/models/aed_weights.hex` です
+   ```bash
+   curl -L -o aed_weights.hex https://raw.githubusercontent.com/STMicroelectronics/STM32N6-GettingStarted-Audio/v2.3.0/Projects/X-CUBE-AI/models/aed_weights.hex
+   ```
+   `bash scripts/stedgeai/generate_esc10.sh <STM32N6-GettingStarted-Audio>` の出力
+   `scripts/stedgeai/st_ai_output_esc10/aed_weights.hex` も同じ内容です。
+2. 取れたものを確かめる。サイズ 9,233,746 バイト、SHA-256 は次のとおりです（Intel HEX のテキストで、改行は CRLF）
+   ```bash
+   wc -c aed_weights.hex      # 9233746 aed_weights.hex
+   sha256sum aed_weights.hex  # b6e3b06b3c140150e7d58203dd7662b8112aba5e5f3dd9a0d3a4be4eb0a9efb8
+   ```
+3. ボードの SW1（BOOT1）を **1-3 側（Development boot）** にし、USB（CN6 STLK）で PC につなぐ。
+   CubeIDE のデバッグは止めておく（ST-LINK は 1 つのプログラムからしか使えない）
+4. CubeIDE 2.2.0 に同梱の STM32CubeProgrammer 2.23.0 の CLI で書く（Git Bash では `C:\` を `C:/` と書く）
+   ```bash
+   "C:/ST/STM32CubeIDE_2.2.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304/tools/bin/STM32_Programmer_CLI.exe" \
+     -c port=SWD mode=HOTPLUG \
+     -el "C:/ST/STM32CubeIDE_2.2.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304/tools/bin/ExternalLoader/MX66UW1G45G_STM32N6570-DK.stldr" \
+     -hardRst -w aed_weights.hex
+   ```
+   Windows の表記では `C:\ST\STM32CubeIDE_2.2.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.500.202603051304\tools\bin\STM32_Programmer_CLI.exe` です。
+   `win32_` の後ろは CubeIDE 2.2.0 に同梱の版で、ほかの版の CubeIDE では変わります（`plugins` の下で確かめて置き換える）。
+
+書き込み先は hex に埋め込まれた `0x70180000` なので、番地は指定しません（署名も不要）。書けたかは、起動ログの
+`[probe] FNV-1a ... MATCH` の行で分かります。
 
 ## 4. 書き込みと起動
 
@@ -104,24 +157,6 @@ set {unsigned int}0x52023280 = {unsigned int}0x52023280 & ~0x00100000       # RA
 レジスタなので他のビットには影響しません。効いていれば起動ログの `npu_hw_init` の行が
 `RCC MEMENR ... already enabled` と `RAMCFG AXISRAM4 CR ... (already powered)` になります。
 自分で起動構成を作るときはこの 6 行を Initialization Commands に貼ってください。
-
-### 4.1 ESC-10 版のモデル重み（外部フラッシュ）
-
-同梱の既定は ESC-10 版で、重み 3,282,785 B を外部フラッシュ `0x70180000` に一度書いておきます
-（FSD50K 版に切り替えたときは重みがアプリの像に含まれる＝AXISRAM4 に置かれるので、この書き込みは要りません）。hex はリポジトリに含めていません（ST のライセンス配布物）。取得は次のどちらか:
-
-- `STM32N6-GettingStarted-Audio` v2.3.0 の `Projects/X-CUBE-AI/models/aed_weights.hex`
-  ```bash
-  curl -L -o aed_weights.hex https://raw.githubusercontent.com/STMicroelectronics/STM32N6-GettingStarted-Audio/v2.3.0/Projects/X-CUBE-AI/models/aed_weights.hex
-  ```
-- `bash scripts/stedgeai/generate_esc10.sh <STM32N6-GettingStarted-Audio>` の出力 `scripts/stedgeai/st_ai_output_esc10/aed_weights.hex`（内容は同一）
-
-```bash
-# STM32CubeProgrammer 2.23.0 の CLI（CubeIDE 同梱。ExternalLoader は同じ tools/bin の下）
-STM32_Programmer_CLI -c port=SWD mode=HOTPLUG -el <tools/bin>/ExternalLoader/MX66UW1G45G_STM32N6570-DK.stldr -hardRst -w aed_weights.hex
-```
-
-書き込み先は hex に埋め込まれた `0x70180000` です（署名不要）。
 
 ## 5. 起動ログの読み方
 
