@@ -36,9 +36,9 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.assembler.option.includepaths.1324468453" name="Include paths (-I)" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.assembler.option.includepaths" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/mtk3_bsp2}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/mtk3bsp2_stm32n657/Appli/mtk3_bsp2/config}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/mtk3bsp2_stm32n657/Appli/mtk3_bsp2/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/mtk3bsp2_stm32n657/Appli/mtk3_bsp2/mtkernel/kernel/knlinc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/mtk3_bsp2/config}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/mtk3_bsp2/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/mtk3_bsp2/mtkernel/kernel/knlinc}&quot;"/>
 								</option>
 								<inputType id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.assembler.input.50727201" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.assembler.input"/>
 							</tool>
@@ -65,9 +65,9 @@
 									<listOptionValue builtIn="false" value="../../Drivers/STM32N6xx_HAL_Driver/Inc/Legacy"/>
 									<listOptionValue builtIn="false" value="../../Drivers/CMSIS/Include"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/mtk3_bsp2}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/mtk3bsp2_stm32n657/Appli/mtk3_bsp2/config}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/mtk3bsp2_stm32n657/Appli/mtk3_bsp2/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/mtk3bsp2_stm32n657/Appli/mtk3_bsp2/mtkernel/kernel/knlinc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/mtk3_bsp2/config}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/mtk3_bsp2/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/mtk3_bsp2/mtkernel/kernel/knlinc}&quot;"/>
 									<listOptionValue builtIn="false" value="../Application/npu/st/ll_aton"/>
 									<listOptionValue builtIn="false" value="../Application/npu/st/device"/>
 									<listOptionValue builtIn="false" value="../Application/npu/st/inc"/>
