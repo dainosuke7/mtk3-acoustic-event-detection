@@ -134,9 +134,10 @@ hex はリポジトリに含めていません（ST のライセンス配布物�
 2. USB（CN6 STLK）で PC につなぐ
 3. CubeIDE で起動構成 **`mtk3bsp2_stm32n657_FSBL Debug`** を実行する（Run > Debug Configurations）。
    この構成は `mtk3bsp2_stm32n657/FSBL/mtk3bsp2_stm32n657_FSBL Debug.launch` としてリポジトリに含まれ、
-   Startup タブの loadList に Appli の `Debug/mtk3bsp2_stm32n657_Appli.elf` が登録済みです。
-   FSBL → Appli の順にデバッガが RAM に載せ、FSBL がアプリに飛びます。Appli 単体の構成で起動すると
-   `usermain()` に到達しません
+   Startup タブの loadList に Appli の `Debug/mtk3bsp2_stm32n657_Appli.elf`、FSBL の
+   `Debug/mtk3bsp2_stm32n657_FSBL.elf`（Main タブの項目）の順に登録済みです（どちらもプロジェクト相対）。
+   デバッガはこの順に Appli → FSBL と RAM に書き込み、Main タブの FSBL から実行を始め、FSBL がアプリに飛びます。
+   Appli 単体の構成で起動すると `usermain()` に到達しません
 4. デバッガで一時停止していたら F8（Resume）で続行する
 
 FSD50K 版に切り替えたとき（10 節の `AED_MODEL`）、重みは AXISRAM4（0x34270000）に置かれますが、この RAM はリセット直後は電源が切れていて
